@@ -4,127 +4,133 @@
       <p class="eyebrow">Multimodal detection workbench</p>
       <h1>上传视频，生成组合风险解释。</h1>
     </div>
-    <p>用户上传演示视频后，系统展示对应的固定分析结果；交互模拟真实检测流程，报告内容保持预生成。</p>
   </section>
 
-  <section class="page-section compact-workbench">
-    <aside class="sample-panel compact-panel">
-      <div class="panel-title">
-        <span class="kicker">Input</span>
-        <h2>上传视频</h2>
-      </div>
-
-      <label class="upload-dropzone" :class="{ ready: uploadedFileName }">
-        <input type="file" accept="video/*" @change="handleUpload" />
-        <span>{{ uploadedFileName || '选择演示视频' }}</span>
-        <small>支持 safe / harmful / metaphor 三类演示视频；分析结果为预生成报告。</small>
-      </label>
-
-      <div class="upload-hints">
-        <span>safe_video</span>
-        <span>harmful_video</span>
-        <span>metaphor_video</span>
-      </div>
-
-      <button class="primary-btn full-width" @click="runDetection" :disabled="running || !uploadedFileName">
-        {{ running ? '模型计算中' : '开始检测' }}
-      </button>
-    </aside>
-
-    <section class="video-stage compact-video-card">
-      <div class="stage-header compact-card-header">
-        <div>
-          <span class="kicker">Preview</span>
-          <h2>{{ selected?.title || '等待上传' }}</h2>
+  <section class="page-section detection-workstation">
+    <div class="workstation-main-row">
+      <aside class="sample-panel compact-panel upload-column">
+        <div class="panel-title">
+          <span class="kicker">Input</span>
+          <h2>上传视频</h2>
         </div>
-        <span v-if="showReport" :class="['status-pill', selected.decision]">{{ selected.decision === 'allowed' ? 'Allowed' : 'Blocked' }}</span>
-        <span v-else class="status-pill pending">Pending</span>
-      </div>
 
-      <video v-if="previewVideo" class="demo-video compact-main-video" :src="previewVideo" controls muted playsinline />
-      <div v-else class="video-placeholder compact-main-video upload-empty-state">
-        <div>
-          <strong>等待上传视频</strong>
-          <span>上传后将在这里预览；点击开始检测后显示分析报告。</span>
-        </div>
-      </div>
+        <label class="upload-dropzone upload-video-dropzone" :class="{ ready: uploadedFileName }">
+          <input type="file" accept="video/*" @change="handleUpload" />
+          <video v-if="previewVideo" class="upload-preview-video" :src="previewVideo" controls muted playsinline />
+          <span v-else>选择演示视频</span>
+          <small>{{ uploadedFileName || '支持 safe / harmful / metaphor 三类演示视频；分析结果为预生成报告。' }}</small>
+        </label>
 
-      <div class="subtitle-card compact-subtitle">
-        <span>字幕 / 文案</span>
-        <p>{{ subtitleText }}</p>
-      </div>
 
-      <div class="process-row compact-process">
-        <div v-for="(step, index) in detectionSteps" :key="step" :class="['process-step', { done: index < progress, current: index === progress && running }]">
-          <span>{{ index + 1 }}</span>
-          <p>{{ step }}</p>
-        </div>
-      </div>
-    </section>
+        <button class="primary-btn full-width" @click="runDetection" :disabled="running || !uploadedFileName">
+          {{ running ? '模型计算中' : '开始检测' }}
+        </button>
+      </aside>
 
-    <aside class="decision-panel compact-report-card">
-      <template v-if="showReport">
-        <div class="decision-topline compact-decision">
-          <span :class="['result-dot', selected.decision]"></span>
+      <section class="video-stage compact-video-card preview-column">
+        <div class="stage-header compact-card-header">
           <div>
-            <p class="kicker">Decision</p>
-            <h2>{{ selected.decision === 'allowed' ? '允许发布' : '建议拦截' }}</h2>
+            <span class="kicker">Cross-source graph</span>
+            <h2>{{ selected?.title || pendingCase?.title || '等待上传' }}</h2>
+          </div>
+          <span v-if="showReport" :class="['status-pill', selected.decision]">{{ selected.decision === 'allowed' ? 'Allowed' : 'Blocked' }}</span>
+          <span v-else class="status-pill pending">Pending</span>
+        </div>
+
+        <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length }" aria-label="跨源关系图片预览">
+          <template v-if="showReport && activeRelationImages.length">
+            <figure v-for="image in activeRelationImages" :key="image.src" class="top-relation-image-card">
+              <img :src="image.src" :alt="image.alt" />
+            </figure>
+          </template>
+          <div v-else class="top-relation-placeholder">
+            <strong>{{ running ? '正在生成跨源关系图' : '等待跨源关系图' }}</strong>
+            <span>{{ running ? '检测完成后将在这里展示分析图。' : uploadedFileName ? '点击开始检测后生成并展示对应分析图。' : '上传视频并完成检测后将在这里展示对应分析图。' }}</span>
           </div>
         </div>
 
-        <div class="compact-stats">
-          <div><span>风险等级</span><strong>{{ levelText }}</strong></div>
-          <div><span>置信度</span><strong>{{ percent(selected.confidence) }}</strong></div>
+        <div class="subtitle-card compact-subtitle">
+          <span>字幕 / 文案</span>
+          <p>{{ subtitleText }}</p>
         </div>
 
-        <div class="subsection tight-section">
-          <h3>风险类型</h3>
-          <div class="tag-row"><span v-for="type in selected.riskTypes" :key="type">{{ type }}</span></div>
+        <div class="process-row compact-process">
+          <div v-for="(step, index) in detectionSteps" :key="step" :class="['process-step', { done: index < progress, current: index === progress && running }]">
+            <span>{{ index + 1 }}</span>
+            <p>{{ step }}</p>
+          </div>
         </div>
+      </section>
+    </div>
 
-        <div class="subsection tight-section">
-          <h3>信号解释</h3>
-          <dl class="signal-list">
-            <div>
-              <dt>视频</dt>
-              <dd>{{ selected.visualSignal }}</dd>
+    <section class="decision-panel report-dock">
+      <template v-if="showReport">
+        <div class="report-content-grid report-content-grid-four">
+          <article class="report-block report-summary-column">
+            <span class="kicker">Detection report</span>
+            <div class="summary-stack">
+              <div class="summary-decision-row">
+                <span :class="['result-dot', selected.decision]"></span>
+                <strong>{{ selected.decision === 'allowed' ? '允许发布' : '建议拦截' }}</strong>
+              </div>
+              <div>
+                <span>置信度</span>
+                <strong>{{ percent(selected.confidence) }}</strong>
+              </div>
+              <div>
+                <span>风险类型</span>
+                <strong>{{ selected.riskTypes.join(' / ') }}</strong>
+              </div>
             </div>
-            <div>
-              <dt>字幕</dt>
-              <dd>{{ selected.textSignal }}</dd>
-            </div>
-            <div>
-              <dt>组合</dt>
-              <dd>{{ selected.fusionSignal }}</dd>
-            </div>
-          </dl>
-        </div>
+          </article>
 
-        <div class="subsection tight-section">
-          <h3>跨源关系</h3>
-          <SceneGraph :relations="selected.relations" />
-        </div>
+          <article class="report-block graph-block relation-placeholder-block">
+            <span class="kicker">Cross-source graph</span>
+            <h3>跨源关系</h3>
+            <div class="relation-empty-placeholder" aria-label="跨源关系占位区域"></div>
+          </article>
 
-        <div class="subsection tight-section final-report">
-          <h3>解释报告</h3>
-          <p>{{ selected.explanation }}</p>
-          <p><strong>处置建议：</strong>{{ selected.recommendation }}</p>
+          <article class="report-block signal-block">
+            <span class="kicker">Signals</span>
+            <h3>多模态信号解释</h3>
+            <dl class="signal-list report-signal-list">
+              <div>
+                <dt>视频</dt>
+                <dd>{{ selected.visualSignal }}</dd>
+              </div>
+              <div>
+                <dt>字幕</dt>
+                <dd>{{ selected.textSignal }}</dd>
+              </div>
+              <div>
+                <dt>组合</dt>
+                <dd>{{ selected.fusionSignal }}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="report-block final-report action-block">
+            <span class="kicker">Explanation</span>
+            <h3>解释与处置建议</h3>
+            <p>{{ selected.explanation }}</p>
+            <p><strong>处置建议：</strong>{{ selected.recommendation }}</p>
+          </article>
         </div>
       </template>
 
-      <div v-else class="report-placeholder">
+      <div v-else class="report-placeholder report-dock-placeholder">
         <span>{{ running ? 'Analyzing' : uploadedFileName ? 'Ready' : 'Empty' }}</span>
         <h2>{{ running ? '模型正在计算' : uploadedFileName ? '等待开始检测' : '尚未上传视频' }}</h2>
-        <p>{{ running ? '系统正在模拟多模态模型计算过程，请稍候。' : uploadedFileName ? '点击“开始检测”后，系统会展示该视频对应的预生成分析报告。' : '请先在左侧上传一个演示视频。' }}</p>
+        <p>{{ running ? '系统正在进行多模态模型计算，请稍候。' : uploadedFileName ? '点击“开始检测”后，下方将展示风险结论、信号解释、关系链路和处置建议。' : '请先在上方上传一个演示视频。' }}</p>
       </div>
-    </aside>
+    </section>
   </section>
 
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import SceneGraph from '../components/SceneGraph.vue'
+import metaphorRelationImage from '../../demo_video/metaphor_video.png'
 import { demoCases, detectionSteps } from '../data/demoCases'
 
 const selected = ref(null)
@@ -136,10 +142,17 @@ const hasReport = ref(false)
 const progress = ref(0)
 let timer = null
 
+const relationImageMap = {
+  'metaphor-risk': [
+    { src: metaphorRelationImage, alt: '隐喻风险跨源关系分析图' }
+  ]
+}
+
 const previewVideo = computed(() => uploadedVideoUrl.value || '')
 const showReport = computed(() => Boolean(selected.value && hasReport.value && !running.value))
 const subtitleText = computed(() => selected.value?.subtitle || pendingCase.value?.subtitle || '上传视频后自动匹配字幕文案。')
 const levelText = computed(() => ({ low: '低', medium: '中', high: '高' }[selected.value?.riskLevel] || selected.value?.riskLevel || '-') )
+const activeRelationImages = computed(() => relationImageMap[(selected.value || pendingCase.value)?.id] || [])
 
 function percent(value) {
   return `${(value * 100).toFixed(2)}%`
@@ -167,29 +180,44 @@ function handleUpload(event) {
   hasReport.value = false
   running.value = false
   progress.value = 0
-  if (timer) clearInterval(timer)
+  if (timer) clearTimeout(timer)
 }
 
 function runDetection() {
   if (!pendingCase.value) return
   running.value = true
   hasReport.value = false
-  selected.value = pendingCase.value
+  selected.value = null
   progress.value = 0
-  if (timer) clearInterval(timer)
-  timer = setInterval(() => {
-    progress.value += 1
-    if (progress.value >= detectionSteps.length) {
+  if (timer) clearTimeout(timer)
+
+  const totalDuration = 9000 + Math.random() * 6000
+  const weights = [1, 3, 2, 4, 5]
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  const stageDurations = weights.map((weight) => totalDuration * weight / totalWeight)
+
+  function advanceStage() {
+    const currentStage = progress.value
+    if (currentStage >= detectionSteps.length) {
+      selected.value = pendingCase.value
       running.value = false
       hasReport.value = true
       progress.value = detectionSteps.length
-      clearInterval(timer)
+      timer = null
+      return
     }
-  }, 900)
+
+    timer = setTimeout(() => {
+      progress.value += 1
+      advanceStage()
+    }, stageDurations[currentStage])
+  }
+
+  advanceStage()
 }
 
 onBeforeUnmount(() => {
   if (uploadedVideoUrl.value) URL.revokeObjectURL(uploadedVideoUrl.value)
-  if (timer) clearInterval(timer)
+  if (timer) clearTimeout(timer)
 })
 </script>
