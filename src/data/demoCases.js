@@ -46,7 +46,7 @@ export const demoCases = [
     decision: 'blocked',
     riskLevel: 'high',
     confidence: 0.9904,
-    riskTypes: ['Threaten', 'Illegal Activity', 'Harassment'],
+    riskTypes: ['Threaten'],
     segments: [],
     entities: [
       { id: 'man', type: 'person' },
@@ -74,7 +74,7 @@ export const demoCases = [
     decision: 'blocked',
     riskLevel: 'high',
     confidence: 0.9637,
-    riskTypes: ['Threaten', 'Harassment'],
+    riskTypes: ['Threaten'],
     segments: [],
     entities: [
       { id: 'man', type: 'person' },

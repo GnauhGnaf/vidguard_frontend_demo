@@ -30,14 +30,14 @@
       <section class="video-stage compact-video-card preview-column">
         <div class="stage-header compact-card-header">
           <div>
-            <span class="kicker">Cross-source graph</span>
-            <h2>{{ selected?.title || pendingCase?.title || '等待上传' }}</h2>
+            <span class="kicker">Visual Scene Entity Extraction</span>
+            <h2>视觉场景实体抽取</h2>
           </div>
           <span v-if="showReport" :class="['status-pill', selected.decision]">{{ selected.decision === 'allowed' ? 'Allowed' : 'Blocked' }}</span>
           <span v-else class="status-pill pending">Pending</span>
         </div>
 
-        <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length }" aria-label="跨源关系图片预览">
+        <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length === 1 }" aria-label="跨源关系图片预览">
           <template v-if="showReport && activeRelationImages.length">
             <figure v-for="image in activeRelationImages" :key="image.src" class="top-relation-image-card">
               <img :src="image.src" :alt="image.alt" />
@@ -87,7 +87,7 @@
           <article class="report-block graph-block relation-placeholder-block">
             <span class="kicker">Cross-source graph</span>
             <h3>跨源关系</h3>
-            <div class="relation-empty-placeholder" aria-label="跨源关系占位区域"></div>
+            <SceneGraph :relations="selected.relations" :caseId="selected.id" />
           </article>
 
           <article class="report-block signal-block">
@@ -130,7 +130,11 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import metaphorRelationImage from '../../demo_video/metaphor_video.png'
+import metaphorRelationImage from '../../demo_video/metaphor_keyframe.jpg'
+import safeKeyframeImage from '../../demo_video/safe_keyframe.jpg'
+import harmfulKeyframe1 from '../../demo_video/harmful_keyframe_1.jpg'
+import harmfulKeyframe2 from '../../demo_video/harmful_keyframe_2.jpg'
+import SceneGraph from '../components/SceneGraph.vue'
 import { demoCases, detectionSteps } from '../data/demoCases'
 
 const selected = ref(null)
@@ -143,6 +147,13 @@ const progress = ref(0)
 let timer = null
 
 const relationImageMap = {
+  'safe-video': [
+    { src: safeKeyframeImage, alt: '合规样本关键帧分析图' }
+  ],
+  'literal-risk': [
+    { src: harmfulKeyframe1, alt: '显性违规关键帧分析图 1' },
+    { src: harmfulKeyframe2, alt: '显性违规关键帧分析图 2' }
+  ],
   'metaphor-risk': [
     { src: metaphorRelationImage, alt: '隐喻风险跨源关系分析图' }
   ]

@@ -297,6 +297,7 @@ p { color: var(--muted); line-height: 1.68; }
 .graph-node, .graph-edge { padding: 8px 11px; border-radius: 999px; background: #f2eadf; border: 1px solid var(--line); font-size: 14px; }
 .graph-edge::before, .graph-edge::after { content: '—'; color: var(--line-strong); margin: 0 4px; }
 .graph-edge.risky, .graph-node.risky { background: #f3d9cf; border-color: #d59b88; color: var(--danger); }
+.scene-graph-infer-image { width: 100%; margin-top: 12px; border-radius: 12px; border: 1px solid var(--line); }
 
 .generation-shell { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; padding: 24px 0; align-items: start; }
 textarea { width: 100%; min-height: 220px; resize: vertical; color: var(--ink); background: var(--paper-soft); border: 1px solid var(--line); border-radius: 18px; padding: 18px; outline: none; line-height: 1.7; }
