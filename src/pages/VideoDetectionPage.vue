@@ -57,7 +57,15 @@
           class="fusion-scene-widget"
         />
 
-        <!-- Other cases: show relation images -->
+        <!-- Metaphor case: show MetaphorFusionScene animation -->
+        <MetaphorFusionScene
+          v-else-if="(pendingCase || selected)?.id === 'metaphor-risk'"
+          :sentence="(selected || pendingCase)?.subtitle || ''"
+          :autoPlay="running"
+          class="fusion-scene-widget"
+        />
+
+        <!-- Safe case: show relation images -->
         <template v-else>
           <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length === 1 }" aria-label="跨源关系图片预览">
             <template v-if="showReport && activeRelationImages.length">
@@ -134,6 +142,7 @@ import safeKeyframeImage from '../../demo_video/safe_keyframe.jpg'
 import harmfulKeyframe1 from '../../demo_video/harmful_keyframe_1.jpg'
 import harmfulKeyframe2 from '../../demo_video/harmful_keyframe_2.jpg'
 import FusionScene from '../components/FusionScene.vue'
+import MetaphorFusionScene from '../components/MetaphorFusionScene.vue'
 import { demoCases, detectionSteps } from '../data/demoCases'
 
 const selected = ref(null)
