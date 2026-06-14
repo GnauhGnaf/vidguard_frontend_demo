@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentence → Relation Graph Animation</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 100vh;
+    font-family: 'PingFang SC', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    color: #e6edf3;
+    overflow: hidden;
+  }
+
+  .stage-indicator {
+    position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; z-index: 10;
+  }
+  .stage-dot {
+    width: 40px; height: 4px; border-radius: 2px;
+    background: #30363d; transition: all 0.5s ease;
+  }
+  .stage-dot.active { background: #58a6ff; box-shadow: 0 0 8px rgba(88,166,255,0.5); }
+  .stage-dot.done { background: #3fb950; }
+
+  .stage-label {
+    position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #8b949e; letter-spacing: 0.04em;
+    transition: all 0.5s ease; z-index: 10;
+  }
+
+  .main-container {
+    position: relative; width: 960px; height: 420px;
+    margin-top: 40px;
+  }
+
+  canvas#arrowCanvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; z-index: 1;
+  }
+
+  .word {
+    position: absolute;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 22px; font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    transition: left 1s cubic-bezier(0.34, 1.56, 0.64, 1),
+                top 1s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.6s ease,
+                color 0.6s ease,
+                opacity 0.5s ease,
+                transform 0.6s ease,
+                box-shadow 0.6s ease,
+                border-color 0.6s ease;
+    z-index: 2;
+    border: 1.5px solid transparent;
+    text-align: center;
+    min-width: 60px;
+  }
+
+  .word.default  { color: #c9d1d9; background: rgba(48,54,61,0.6); border-color: #30363d; }
+  .word.noun     { color: #ffa657; background: rgba(255,166,87,0.12); border-color: rgba(255,166,87,0.4); }
+  .word.verb     { color: #79c0ff; background: rgba(121,192,255,0.12); border-color: rgba(121,192,255,0.4); }
+  .word.danger   { color: #ff4a4a; background: rgba(255,74,74,0.15); border-color: rgba(255,74,74,0.5);
+                   box-shadow: 0 0 20px rgba(255,74,74,0.3); animation: pulse-red 1.2s ease-in-out infinite; }
+  .word.fade-out { opacity: 0; transform: scale(0.7); pointer-events: none; }
+
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,74,74,0.3); }
+    50%      { box-shadow: 0 0 32px rgba(255,74,74,0.6); }
+  }
+
+  .controls {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; z-index: 10;
+  }
+  .ctrl-btn {
+    padding: 10px 24px; border-radius: 8px; border: 1px solid #30363d;
+    background: #161b22; color: #c9d1d9;
+    font-size: 15px; cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .ctrl-btn:hover { border-color: #58a6ff; color: #e6edf3; background: #1c2333; }
+  .ctrl-btn:disabled { opacity: 0.35; cursor: default; }
+  .ctrl-btn.play { border-color: #3fb950; color: #3fb950; }
+
+  .legend {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 24px; font-size: 13px; color: #8b949e;
+    opacity: 0; transition: opacity 0.8s ease; z-index: 10;
+  }
+  .legend.visible { opacity: 1; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 3px;
+  }
+  .legend-dot.noun { background: #ffa657; }
+  .legend-dot.verb { background: #79c0ff; }
+  .legend-dot.danger { background: #ff4a4a; }
+</style>
+</head>
+<body>
+
+<div class="stage-indicator">
+  <div class="stage-dot" data-stage="0"></div>
+  <div class="stage-dot" data-stage="1"></div>
+  <div class="stage-dot" data-stage="2"></div>
+  <div class="stage-dot" data-stage="3"></div>
+  <div class="stage-dot" data-stage="4"></div>
+  <div class="stage-dot" data-stage="5"></div>
+</div>
+<div class="stage-label" id="stageLabel">完整句子</div>
+
+<div class="main-container" id="container">
+  <canvas id="arrowCanvas"></canvas>
+</div>
+
+<div class="legend" id="legend">
+  <span class="legend-item"><span class="legend-dot noun"></span> 名词 / 代词</span>
+  <span class="legend-item"><span class="legend-dot verb"></span> 动词</span>
+  <span class="legend-item"><span class="legend-dot danger"></span> 危险实体</span>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="btnPrev" onclick="prevStage()">← 上一步</button>
+  <button class="ctrl-btn play" id="btnPlay" onclick="toggleAutoPlay()">▶ 自动播放</button>
+  <button class="ctrl-btn" id="btnNext" onclick="nextStage()">下一步 →</button>
+  <button class="ctrl-btn" id="btnReset" onclick="resetAll()">↺ 重置</button>
+</div>
+
+<script>
+// ── word definitions (no hardcoded positions) ──────────────────
+const tokens = [
+  { id: 'this',      text: 'This',    type: 'noun'   },
+  { id: 'allows',    text: 'allows',  type: 'verb'   },
+  { id: 'the1',      text: 'the',     type: 'filler' },
+  { id: 'man',       text: 'man',     type: 'noun'   },
+  { id: 'to',        text: 'to',      type: 'filler' },
+  { id: 'supervise', text: 'supervise', type: 'verb' },
+  { id: 'the2',      text: 'the',     type: 'filler' },
+  { id: 'woman',     text: 'woman',   type: 'noun'   },
+  { id: 'use',       text: 'use',     type: 'verb'   },
+];
+
+// which words form each stage's layout, and at what y / gap
+const sentenceOrder = ['this','allows','the1','man','to','supervise','the2','woman'];
+const chainOrder    = ['this','allows','man','supervise','woman'];              // stages 3-4
+
+const arrowDefs = {
+  3: [
+    { from: 'this', to: 'allows' }, { from: 'allows', to: 'man' },
+    { from: 'man', to: 'supervise' }, { from: 'supervise', to: 'woman' },
+  ],
+  4: [
+    { from: 'this', to: 'allows' }, { from: 'allows', to: 'man' },
+    { from: 'man', to: 'supervise' }, { from: 'supervise', to: 'woman' },
+  ],
+  5: [
+    { from: 'use', to: 'this' }, { from: 'man', to: 'use' },
+    { from: 'man', to: 'supervise' }, { from: 'supervise', to: 'woman' },
+  ],
+};
+
+// ── state ─────────────────────────────────────────────────────
+let currentStage = 0;
+let autoPlayTimer = null;
+let redrawTimer = null;
+let isAutoPlaying = false;
+const totalStages = 5;
+const container = document.getElementById('container');
+const canvas = document.getElementById('arrowCanvas');
+const ctx = canvas.getContext('2d');
+
+// ── create word elements ──────────────────────────────────────
+const wordEls = {};
+
+tokens.forEach(w => {
+  const el = document.createElement('span');
+  el.className = 'word default';
+  el.textContent = w.text;
+  el.id = 'word-' + w.id;
+  el.style.opacity = '0';
+  el.style.left = '0px';
+  el.style.top = '0px';
+  container.appendChild(el);
+  wordEls[w.id] = el;
+});
+
+// canvas sizing
+function resizeCanvas() {
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = rect.height * devicePixelRatio;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); drawArrows(currentStage); });
+
+// ── arrow drawing ─────────────────────────────────────────────
+function getWordRect(id) {
+  const el = wordEls[id];
+  if (!el) return null;
+  // read TARGET style values (not getBoundingClientRect which lags during CSS transition)
+  const left = parseFloat(el.style.left) || 0;
+  const top  = parseFloat(el.style.top)  || 0;
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  return {
+    left, top,
+    right:  left + w,
+    bottom: top + h,
+    cx:     left + w / 2,
+    cy:     top + h / 2,
+  };
+}
+
+// ray from (px,py) in direction (dx,dy) — find intersection with rect
+function rayRectExit(px, py, dx, dy, rect, padding) {
+  let tMin = Infinity;
+  const pad = padding || 0;
+  const r = {
+    left:   rect.left - pad,
+    top:    rect.top - pad,
+    right:  rect.right + pad,
+    bottom: rect.bottom + pad,
+  };
+
+  // left / right edges
+  if (Math.abs(dx) > 1e-9) {
+    for (const edgeX of [r.left, r.right]) {
+      const t = (edgeX - px) / dx;
+      if (t > 1e-9) {
+        const y = py + t * dy;
+        if (y >= r.top && y <= r.bottom) tMin = Math.min(tMin, t);
+      }
+    }
+  }
+  // top / bottom edges
+  if (Math.abs(dy) > 1e-9) {
+    for (const edgeY of [r.top, r.bottom]) {
+      const t = (edgeY - py) / dy;
+      if (t > 1e-9) {
+        const x = px + t * dx;
+        if (x >= r.left && x <= r.right) tMin = Math.min(tMin, t);
+      }
+    }
+  }
+
+  if (tMin === Infinity) return { x: px, y: py };
+  return { x: px + tMin * dx, y: py + tMin * dy };
+}
+
+function drawArrow(from, to) {
+  const rectA = getWordRect(from);
+  const rectB = getWordRect(to);
+  if (!rectA || !rectB) return;
+
+  const dx = rectB.cx - rectA.cx;
+  const dy = rectB.cy - rectA.cy;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+
+  const ux = dx / len, uy = dy / len;
+
+  // start: exit rectA in direction toward B
+  const start = rayRectExit(rectA.cx, rectA.cy, ux, uy, rectA, -2);
+  // end:   exit rectB in direction toward A (reverse)
+  const end   = rayRectExit(rectB.cx, rectB.cy, -ux, -uy, rectB, -2);
+
+  const headLen = 14;
+
+  ctx.strokeStyle = '#8b949e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  // arrowhead
+  ctx.fillStyle = '#8b949e';
+  ctx.beginPath();
+  ctx.moveTo(end.x, end.y);
+  ctx.lineTo(
+    end.x - headLen * Math.cos(Math.atan2(end.y - start.y, end.x - start.x) - 0.45),
+    end.y - headLen * Math.sin(Math.atan2(end.y - start.y, end.x - start.x) - 0.45)
+  );
+  ctx.lineTo(
+    end.x - headLen * Math.cos(Math.atan2(end.y - start.y, end.x - start.x) + 0.45),
+    end.y - headLen * Math.sin(Math.atan2(end.y - start.y, end.x - start.x) + 0.45)
+  );
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawArrows(stage) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const defs = arrowDefs[stage];
+  if (!defs) return;
+  defs.forEach(a => drawArrow(a.from, a.to, a.dir));
+}
+
+// ── dynamic layout ────────────────────────────────────────────
+const CTN_W = 960; // container width
+
+// measure *current* rendered width of a word element
+function wWidth(id) { return wordEls[id].offsetWidth; }
+
+// lay out a row of word ids evenly with equal edge-to-edge gaps, centred in container
+function layoutRow(ids, targetGap, y) {
+  const widths = ids.map(id => wWidth(id));
+  const totalW = widths.reduce((a, b) => a + b, 0) + targetGap * (ids.length - 1);
+  const positions = {};
+  let x = Math.round((CTN_W - totalW) / 2);
+  ids.forEach((id, i) => {
+    positions[id] = { left: x, top: y };
+    x += widths[i] + targetGap;
+  });
+  return positions;
+}
+
+// ── apply stage to DOM ────────────────────────────────────────
+function applyStage(stage) {
+  currentStage = stage;
+
+  // 1. set text content for this stage
+  wordEls['this'].textContent = stage >= 4 ? 'knife' : 'This';
+
+  // 2. decide visibility & classes for every token
+  const visible = {}; // id → boolean
+  tokens.forEach(w => {
+    const isFiller = w.type === 'filler';
+    if (isFiller && stage >= 2)      visible[w.id] = false;
+    else if (w.id === 'use')         visible[w.id] = stage >= 5;
+    else if (w.id === 'allows')      visible[w.id] = stage < 5;
+    else                             visible[w.id] = true;
+  });
+
+  // 3. show/hide → measure → layout
+  tokens.forEach(w => {
+    const el = wordEls[w.id];
+    if (visible[w.id]) {
+      el.style.opacity = '1'; el.style.transform = 'scale(1)';
+    } else {
+      el.style.opacity = '0'; el.style.transform = 'scale(0.7)';
+    }
+  });
+
+  // 4. compute positions with even gaps
+  let positions;
+  if (stage <= 2) {
+    positions = layoutRow(sentenceOrder, 28, 180);
+  } else if (stage <= 4) {
+    positions = layoutRow(chainOrder, 90, 180);
+  } else {
+    // stage 5: all 5 words on one line
+    positions = layoutRow(['this','use','man','supervise','woman'], 90, 180);
+  }
+
+  // 5. apply positions
+  Object.entries(positions).forEach(([id, pos]) => {
+    const el = wordEls[id];
+    el.style.left = pos.left + 'px';
+    el.style.top  = pos.top + 'px';
+  });
+
+  // 6. CSS classes
+  tokens.forEach(w => {
+    const el = wordEls[w.id];
+    el.classList.remove('default', 'noun', 'verb', 'danger', 'fade-out');
+    if (!visible[w.id]) {
+      el.classList.add('fade-out');
+    } else if (stage >= 1) {
+      el.classList.add(w.id === 'this' && stage >= 4 ? 'danger' : w.type);
+    } else {
+      el.classList.add('default');
+    }
+  });
+
+  // 7. arrows (now + after CSS transition)
+  drawArrows(stage);
+  if (redrawTimer) clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(() => drawArrows(stage), 1100);
+
+  // 8. UI indicators
+  document.querySelectorAll('.stage-dot').forEach((dot, i) => {
+    dot.classList.remove('active', 'done');
+    if (i < stage) dot.classList.add('done');
+    if (i === stage) dot.classList.add('active');
+  });
+
+  const labels = [
+    '文本输入', '依存句法分析', '三元关系组构建',
+    '结构文本场景图', '危险实体标红', '多模态关系图'
+  ];
+  document.getElementById('stageLabel').textContent =
+    `Step ${stage + 1}/${totalStages + 1}: ${labels[stage]}`;
+
+  const legend = document.getElementById('legend');
+  legend.classList.toggle('visible', stage >= 1);
+
+  updateButtons();
+}
+
+function updateButtons() {
+  document.getElementById('btnPrev').disabled = currentStage <= 0;
+  document.getElementById('btnNext').disabled = currentStage >= totalStages;
+}
+
+// ── navigation ────────────────────────────────────────────────
+function nextStage() {
+  if (currentStage < totalStages) applyStage(currentStage + 1);
+}
+
+function prevStage() {
+  if (currentStage > 0) applyStage(currentStage - 1);
+}
+
+function resetAll() {
+  stopAutoPlay();
+  applyStage(0);
+}
+
+function toggleAutoPlay() {
+  if (isAutoPlaying) { stopAutoPlay(); return; }
+  isAutoPlaying = true;
+  document.getElementById('btnPlay').textContent = '⏸ 暂停';
+  document.getElementById('btnPlay').classList.remove('play');
+  applyStage(0);
+  advanceAuto();
+}
+
+function stopAutoPlay() {
+  isAutoPlaying = false;
+  if (autoPlayTimer) clearTimeout(autoPlayTimer);
+  autoPlayTimer = null;
+  document.getElementById('btnPlay').textContent = '▶ 自动播放';
+  document.getElementById('btnPlay').classList.add('play');
+}
+
+const stageDurations = [2000, 1500, 2000, 1800, 2000, 2500]; // duration for each transition
+
+function advanceAuto() {
+  if (!isAutoPlaying) return;
+  if (currentStage < totalStages) {
+    nextStage();
+    autoPlayTimer = setTimeout(advanceAuto, stageDurations[currentStage]);
+  } else {
+    stopAutoPlay();
+  }
+}
+
+// ── keyboard ──────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextStage(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevStage(); }
+  if (e.key === 'r') resetAll();
+  if (e.key === 'p') toggleAutoPlay();
+});
+
+// ── init ──────────────────────────────────────────────────────
+applyStage(0);
+</script>
+</body>
+</html>

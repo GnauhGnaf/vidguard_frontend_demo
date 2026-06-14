@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visual Cumulative Scene Graph — Harmful Video</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 100vh;
+    font-family: 'PingFang SC', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    color: #e6edf3;
+    padding: 24px;
+  }
+
+  .layout {
+    display: flex; gap: 32px; align-items: flex-start;
+    max-width: 1300px; width: 100%;
+  }
+
+  /* ── video ─────────────────────────────────────── */
+  .video-col {
+    flex: 0 0 640px;
+  }
+  .video-col video {
+    width: 100%; border-radius: 12px; border: 1px solid #30363d;
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
+  }
+
+  /* ── graph column ──────────────────────────────── */
+  .graph-col {
+    flex: 1; display: flex; flex-direction: column; gap: 32px;
+    min-width: 480px;
+  }
+
+  .graph-panel {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 12px; padding: 24px;
+  }
+  .graph-panel h3 {
+    font-size: 14px; color: #8b949e; letter-spacing: 0.06em;
+    margin-bottom: 20px; text-transform: uppercase;
+  }
+
+  .graph-stage {
+    position: relative; height: 100px;
+  }
+
+  /* ── graph nodes ───────────────────────────────── */
+  .gnode {
+    position: absolute;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 18px; font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.4s ease;
+    border: 1.5px solid transparent;
+  }
+  .gnode.entity  { color: #ffa657; background: rgba(255,166,87,0.10); border-color: rgba(255,166,87,0.35); }
+  .gnode.action  { color: #79c0ff; background: rgba(121,192,255,0.10); border-color: rgba(121,192,255,0.35); }
+  .gnode.danger  { color: #ff4a4a; background: rgba(255,74,74,0.15); border-color: rgba(255,74,74,0.5);
+                   box-shadow: 0 0 16px rgba(255,74,74,0.25); }
+  .gnode.new     { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+  @keyframes pop-in {
+    0%   { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── canvas arrows ─────────────────────────────── */
+  .graph-canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; pointer-events: none; z-index: 0;
+  }
+
+  .gnode { z-index: 1; }
+
+  /* ── legend ────────────────────────────────────── */
+  .legend-row {
+    display: flex; gap: 20px; font-size: 12px; color: #8b949e;
+    margin-top: 12px;
+  }
+  .legend-row span { display: flex; align-items: center; gap: 6px; }
+  .ldot { width: 8px; height: 8px; border-radius: 2px; }
+  .ldot.entity  { background: #ffa657; }
+  .ldot.action  { background: #79c0ff; }
+  .ldot.danger  { background: #ff4a4a; }
+
+  /* ── frame counter ─────────────────────────────── */
+  .frame-badge {
+    display: inline-block; padding: 4px 12px;
+    background: #30363d; border-radius: 4px;
+    font-size: 12px; color: #8b949e; margin-top: 8px;
+  }
+
+  .frame-badge.active { background: #238636; color: #e6edf3; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- video -->
+  <div class="video-col">
+    <video id="mainVideo" src="harmful_masked.mp4" controls muted playsinline></video>
+    <div style="margin-top:8px">
+      <span class="frame-badge" id="frameBadge">frame 1 / 141</span>
+      <span style="font-size:13px;color:#8b949e;margin-left:8px" id="annotLabel"></span>
+    </div>
+  </div>
+
+  <!-- graphs -->
+  <div class="graph-col">
+    <div class="graph-panel">
+      <h3>当前帧场景图</h3>
+      <div class="graph-stage" id="stageCurrent">
+        <canvas class="graph-canvas" id="canvasCurrent"></canvas>
+      </div>
+    </div>
+
+    <div class="graph-panel">
+      <h3>累计场景图</h3>
+      <div class="graph-stage" id="stageCumulative">
+        <canvas class="graph-canvas" id="canvasCumulative"></canvas>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <span><span class="ldot entity"></span> 实体</span>
+      <span><span class="ldot action"></span> 关系/动作</span>
+      <span><span class="ldot danger"></span> 危险实体</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── frame→annotation map ──────────────────────────────────────
+const TOTAL_FRAMES = 141;
+const FPS = 24;
+
+// build annotation map: which labels appear in each frame
+const frameAnnotations = {};
+// person1+gun: frames 1-37
+for (let f = 1; f <= 37; f++) frameAnnotations[f] = ['person1','gun'];
+// gun only: frames 38-51
+for (let f = 38; f <= 51; f++) frameAnnotations[f] = ['gun'];
+// frames 52-90: no entities (no JSON)
+// person2: frames 91-141
+for (let f = 91; f <= 141; f++) frameAnnotations[f] = ['person2'];
+
+function getAnnotations(frame) {
+  return frameAnnotations[frame] || [];
+}
+
+// ── graph layout helpers ──────────────────────────────────────
+function placeNodes(ids, labels, types, startX, y, gap) {
+  const nodes = {};
+  let x = startX;
+  // use a temp element to measure or use estimates
+  // we'll measure from DOM if nodes exist, otherwise use estimates
+  ids.forEach((id, i) => {
+    nodes[id] = {
+      left: x, top: y,
+      width: (labels[i] || id).length * 12 + 36, // rough estimate
+      label: labels[i] || id,
+      type: types[i] || 'entity',
+    };
+    x += nodes[id].width + gap;
+  });
+  return nodes;
+}
+
+// ── render a graph into a container ───────────────────────────
+function renderGraph(containerId, canvasId, nodeDefs, arrows) {
+  const container = document.getElementById(containerId);
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // remove old nodes
+  container.querySelectorAll('.gnode').forEach(el => el.remove());
+
+  // measure or use stored widths, then layout
+  const ids = Object.keys(nodeDefs);
+  // first pass: create temp elements to measure
+  const measured = {};
+  ids.forEach(id => {
+    const def = nodeDefs[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + def.type;
+    el.textContent = def.label;
+    el.style.left = '-9999px';
+    container.appendChild(el);
+    measured[id] = { width: el.offsetWidth, height: el.offsetHeight };
+    el.remove();
+  });
+
+  // layout nodes evenly within container
+  const totalW = ids.reduce((s, id) => s + measured[id].width, 0);
+  let gap, startX;
+  if (ids.length <= 1) {
+    gap = 0; startX = Math.round((rect.width - totalW) / 2);
+  } else {
+    gap = Math.round((rect.width - totalW) / (ids.length - 1));
+    if (gap < 22) gap = 22; // minimum readable gap
+    startX = Math.round((rect.width - (totalW + gap * (ids.length - 1))) / 2);
+    if (startX < 8) startX = 8;
+  }
+
+  const positions = {};
+  let cx = startX;
+  ids.forEach(id => {
+    const w = measured[id].width;
+    positions[id] = { left: cx, top: 32, width: w, height: measured[id].height };
+    cx += w + gap;
+  });
+
+  // create visible nodes
+  ids.forEach(id => {
+    const def = nodeDefs[id];
+    const pos = positions[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + def.type;
+    el.textContent = def.label;
+    el.style.left = pos.left + 'px';
+    el.style.top = pos.top + 'px';
+    if (def.isNew) el.classList.add('new');
+    container.appendChild(el);
+  });
+
+  // draw arrows
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  arrows.forEach(arrow => {
+    drawArrowOnCanvas(ctx, positions, arrow, gap);
+  });
+}
+
+function drawArrowOnCanvas(ctx, positions, arrow, gap) {
+  const a = positions[arrow.from];
+  const b = positions[arrow.to];
+  if (!a || !b) return;
+
+  const ax = a.left + a.width / 2;
+  const ay = a.top + a.height / 2;
+  const bx = b.left + b.width / 2;
+  const by = b.top + b.height / 2;
+
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+
+  // start from edge of a, end at edge of b
+  const sx = ax + ux * (a.width/2 + 4);
+  const sy = ay + uy * (a.height/2 + 4);
+  const ex = bx - ux * (b.width/2 + 4);
+  const ey = by - uy * (b.height/2 + 4);
+
+  ctx.strokeStyle = '#8b949e';
+  ctx.lineWidth = 2;
+  if (arrow.dashed) ctx.setLineDash([3, 5]);
+  else ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // arrowhead
+  const headLen = 10;
+  const angle = Math.atan2(ey - sy, ex - sx);
+  ctx.fillStyle = '#8b949e';
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(
+    ex - headLen * Math.cos(angle - 0.45),
+    ey - headLen * Math.sin(angle - 0.45)
+  );
+  ctx.lineTo(
+    ex - headLen * Math.cos(angle + 0.45),
+    ey - headLen * Math.sin(angle + 0.45)
+  );
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── scene graph definitions ───────────────────────────────────
+// Current frame graph
+function getCurrentGraph(frame) {
+  const ann = getAnnotations(frame);
+  const nodes = {};
+  const arrows = [];
+
+  if (ann.includes('person1') && ann.includes('gun')) {
+    nodes['person1'] = { label: 'person1', type: 'entity' };
+    nodes['hold']   = { label: 'hold',    type: 'action' };
+    nodes['gun']    = { label: 'gun',     type: 'danger' };
+    arrows.push({ from: 'person1', to: 'hold' });
+    arrows.push({ from: 'hold',    to: 'gun' });
+  } else if (ann.includes('gun') && !ann.includes('person1') && !ann.includes('person2')) {
+    nodes['gun'] = { label: 'gun', type: 'danger' };
+  } else if (ann.includes('person2')) {
+    nodes['person2'] = { label: 'person2', type: 'entity' };
+  }
+  // if no annotations, nodes stays empty (blank graph)
+
+  return { nodes, arrows };
+}
+
+// ── cumulative graph state ────────────────────────────────────
+let cumulativePhase = 0;         // 0 = basic, 1 = expanded
+let cumNodes = {};               // persistent node data { id: { label, type, left, top, width, height } }
+let cumArrows = [];              // persistent arrow data
+let cumTransitioning = false;
+
+function measureNode(label, type) {
+  const el = document.createElement('span');
+  el.className = 'gnode ' + type;
+  el.textContent = label;
+  el.style.left = '-9999px'; el.style.top = '-9999px';
+  document.getElementById('stageCumulative').appendChild(el);
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.remove();
+  return { w, h };
+}
+
+function layoutCumulative(ids, labels, types) {
+  const container = document.getElementById('stageCumulative');
+  const rect = container.getBoundingClientRect();
+  const measured = ids.map((id, i) => ({ id, ...measureNode(labels[i], types[i]) }));
+  const totalW = measured.reduce((s, m) => s + m.w, 0);
+  const n = ids.length;
+  let gap = n > 1 ? Math.round((rect.width - totalW) / (n - 1)) : 0;
+  if (gap < 22) gap = 22;
+  const startX = Math.max(8, Math.round((rect.width - (totalW + gap * (n - 1))) / 2));
+  const result = {};
+  let cx = startX;
+  measured.forEach(m => {
+    result[m.id] = { label: labels[ids.indexOf(m.id)], type: types[ids.indexOf(m.id)], left: cx, top: 32, width: m.w, height: m.h };
+    cx += m.w + gap;
+  });
+  return result;
+}
+
+function getDOMNodeRect(label) {
+  const container = document.getElementById('stageCumulative');
+  const cr = container.getBoundingClientRect();
+  const els = container.querySelectorAll('.gnode');
+  for (const el of els) {
+    if (el.textContent === label) {
+      const r = el.getBoundingClientRect();
+      return { left: r.left - cr.left, top: r.top - cr.top, width: r.width, height: r.height };
+    }
+  }
+  return null;
+}
+
+function drawCumulativeArrows() {
+  const canvas = document.getElementById('canvasCumulative');
+  const container = document.getElementById('stageCumulative');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  // build a label→position map from actual DOM
+  const labels = ['person1','hold','gun','point','person2'];
+  const pos = {};
+  labels.forEach(l => { const r = getDOMNodeRect(l); if (r) pos[l] = r; });
+
+  cumArrows.forEach(arrow => {
+    const a = pos[arrow.from], b = pos[arrow.to];
+    if (!a || !b) return;
+    const ax = a.left + a.width/2, ay = a.top + a.height/2;
+    const bx = b.left + b.width/2, by = b.top + b.height/2;
+    const dx = bx - ax, dy = by - ay, len = Math.sqrt(dx*dx+dy*dy);
+    if (len < 1) return;
+    const ux = dx/len, uy = dy/len;
+    const sx = ax + ux*(a.width/2+4), sy = ay + uy*(a.height/2+4);
+    const ex = bx - ux*(b.width/2+4), ey = by - uy*(b.height/2+4);
+
+    ctx.strokeStyle = '#8b949e'; ctx.lineWidth = 2;
+    if (arrow.dashed) ctx.setLineDash([3, 5]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const headLen = 10, angle = Math.atan2(ey-sy, ex-sx);
+    ctx.fillStyle = '#8b949e';
+    ctx.beginPath(); ctx.moveTo(ex, ey);
+    ctx.lineTo(ex-headLen*Math.cos(angle-0.45), ey-headLen*Math.sin(angle-0.45));
+    ctx.lineTo(ex-headLen*Math.cos(angle+0.45), ey-headLen*Math.sin(angle+0.45));
+    ctx.closePath(); ctx.fill();
+  });
+}
+
+function buildCumulativeDOM() {
+  const container = document.getElementById('stageCumulative');
+  container.querySelectorAll('.gnode').forEach(el => el.remove());
+  Object.entries(cumNodes).forEach(([id, n]) => {
+    const el = document.createElement('span');
+    el.className = 'gnode ' + n.type;
+    el.textContent = n.label;
+    el.style.left = n.left + 'px';
+    el.style.top = n.top + 'px';
+    if (n.isNew) el.classList.add('new');
+    container.appendChild(el);
+  });
+  drawCumulativeArrows();
+}
+
+function initCumulativeBasic() {
+  cumNodes = layoutCumulative(
+    ['person1','hold','gun'],
+    ['person1','hold','gun'],
+    ['entity','action','danger']
+  );
+  cumArrows = [
+    { from: 'person1', to: 'hold' },
+    { from: 'hold', to: 'gun' },
+  ];
+  buildCumulativeDOM();
+}
+
+function expandCumulative() {
+  if (cumTransitioning || cumulativePhase >= 1) return;
+  cumTransitioning = true;
+  cumulativePhase = 1;
+
+  const container = document.getElementById('stageCumulative');
+  const rect = container.getBoundingClientRect();
+
+  const allIds = ['person1','hold','gun','point','person2'];
+  const allLabels = ['person1','hold','gun','point','person2'];
+  const allTypes = ['entity','action','danger','action','entity'];
+
+  // measure all 5 target nodes
+  const measured = allIds.map((id, i) => ({ id, ...measureNode(allLabels[i], allTypes[i]) }));
+  const totalW = measured.reduce((s, m) => s + m.w, 0);
+  let gap = Math.round((rect.width - totalW) / 4);
+  if (gap < 22) gap = 22;
+  const startX = Math.max(8, Math.round((rect.width - (totalW + gap * 4)) / 2));
+
+  const target = {};
+  let cx = startX;
+  measured.forEach(m => {
+    target[m.id] = { left: cx, top: 32, width: m.w, height: m.h, label: allLabels[allIds.indexOf(m.id)], type: allTypes[allIds.indexOf(m.id)] };
+    cx += m.w + gap;
+  });
+
+  // insert new nodes at final position but hidden
+  const newEls = {};
+  ['point','person2'].forEach(id => {
+    const t = target[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + t.type;
+    el.textContent = t.label;
+    el.style.left = t.left + 'px';
+    el.style.top = t.top + 'px';
+    el.style.opacity = '0';
+    container.appendChild(el);
+    newEls[id] = el;
+  });
+
+  // move existing nodes to new positions — simple ease, no bounce
+  container.querySelectorAll('.gnode').forEach(el => {
+    if (newEls[el.textContent]) return;
+    const id = allIds.find(i => allLabels[allIds.indexOf(i)] === el.textContent);
+    if (id && target[id]) {
+      el.style.transition = 'left 0.6s ease';
+      el.style.left = target[id].left + 'px';
+    }
+  });
+
+  // update state
+  cumNodes = target;
+  cumArrows = [
+    { from: 'person1', to: 'hold' },
+    { from: 'hold', to: 'gun' },
+    { from: 'gun', to: 'point', dashed: true },
+    { from: 'point', to: 'person2', dashed: true },
+  ];
+
+  // redraw arrows every frame from actual DOM positions during transition
+  const duration = 600;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    Object.values(newEls).forEach(el => { el.style.opacity = Math.min(1, t * 2); });
+    drawCumulativeArrows(); // reads actual DOM positions
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      Object.values(newEls).forEach(el => { el.style.opacity = '1'; });
+      drawCumulativeArrows();
+      cumTransitioning = false;
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// ── update all ────────────────────────────────────────────────
+function updateForFrame(frame) {
+  document.getElementById('frameBadge').textContent = `frame ${frame} / ${TOTAL_FRAMES}`;
+
+  const ann = getAnnotations(frame);
+  document.getElementById('annotLabel').textContent =
+    ann.length ? '标注: ' + ann.join(', ') : '(无实体)';
+
+  // current frame graph — always re-render
+  const cur = getCurrentGraph(frame);
+  renderGraph('stageCurrent', 'canvasCurrent', cur.nodes, cur.arrows);
+
+  // cumulative graph — stateful, only expand once
+  if (frame >= 91 && cumulativePhase < 1) {
+    expandCumulative();
+  }
+}
+
+// ── video sync ────────────────────────────────────────────────
+const video = document.getElementById('mainVideo');
+
+function resetCumulative() {
+  cumulativePhase = 0;
+  cumTransitioning = false;
+  cumNodes = {};
+  cumArrows = [];
+  initCumulativeBasic();
+}
+
+video.addEventListener('timeupdate', () => {
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  // reset cumulative graph when video loops back
+  if (frame < 10 && cumulativePhase >= 1) {
+    resetCumulative();
+  }
+  updateForFrame(frame);
+});
+
+video.addEventListener('seeked', () => {
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  if (frame < 10 && cumulativePhase >= 1) {
+    resetCumulative();
+  }
+  updateForFrame(frame);
+});
+
+// initial render
+initCumulativeBasic();
+updateForFrame(1);
+
+// resize handling
+window.addEventListener('resize', () => {
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  updateForFrame(frame);
+  // re-layout cumulative to fit new container width
+  if (cumulativePhase === 0) {
+    initCumulativeBasic();
+  } else {
+    // re-layout all 5 nodes
+    const allIds = ['person1','hold','gun','point','person2'];
+    const allLabels = ['person1','hold','gun','point','person2'];
+    const allTypes = ['entity','action','danger','action','entity'];
+    cumNodes = layoutCumulative(allIds, allLabels, allTypes);
+    buildCumulativeDOM();
+  }
+});
+</script>
+</body>
+</html>

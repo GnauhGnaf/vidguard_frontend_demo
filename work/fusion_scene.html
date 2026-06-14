@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fusion Scene Graph — Visual + Text</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    display: flex; flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'PingFang SC', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    color: #e6edf3;
+    padding: 24px;
+    gap: 48px;
+  }
+
+  /* ================================================================
+     VISUAL SECTION (cumulative scene graph + video)
+     ================================================================ */
+
+  .visual-section {
+    width: 100%; max-width: 1300px;
+  }
+
+  .layout {
+    display: flex; gap: 32px; align-items: flex-start;
+  }
+
+  .video-col { flex: 0 0 640px; }
+  .video-col video {
+    width: 100%; border-radius: 12px; border: 1px solid #30363d;
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
+  }
+
+  .graph-col {
+    flex: 1; display: flex; flex-direction: column; gap: 32px;
+    min-width: 480px;
+  }
+
+  .graph-panel {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 12px; padding: 24px;
+  }
+  .graph-panel h3 {
+    font-size: 14px; color: #8b949e; letter-spacing: 0.06em;
+    margin-bottom: 20px; text-transform: uppercase;
+  }
+
+  .graph-stage {
+    position: relative; height: 100px;
+  }
+
+  .gnode {
+    position: absolute;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 18px; font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.4s ease;
+    border: 1.5px solid transparent;
+  }
+  .gnode.entity  { color: #ffa657; background: rgba(255,166,87,0.10); border-color: rgba(255,166,87,0.35); }
+  .gnode.action  { color: #79c0ff; background: rgba(121,192,255,0.10); border-color: rgba(121,192,255,0.35); }
+  .gnode.danger  { color: #ff4a4a; background: rgba(255,74,74,0.15); border-color: rgba(255,74,74,0.5);
+                   box-shadow: 0 0 16px rgba(255,74,74,0.25); }
+  .gnode.new     { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+  @keyframes pop-in {
+    0%   { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .graph-canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; pointer-events: none; z-index: 0;
+  }
+  .gnode { z-index: 1; }
+
+  .visual-legend {
+    display: flex; gap: 20px; font-size: 12px; color: #8b949e;
+    margin-top: 12px;
+  }
+  .visual-legend span { display: flex; align-items: center; gap: 6px; }
+  .ldot { width: 8px; height: 8px; border-radius: 2px; }
+  .ldot.entity  { background: #ffa657; }
+  .ldot.action  { background: #79c0ff; }
+  .ldot.danger  { background: #ff4a4a; }
+
+  .frame-badge {
+    display: inline-block; padding: 4px 12px;
+    background: #30363d; border-radius: 4px;
+    font-size: 12px; color: #8b949e; margin-top: 8px;
+  }
+  .frame-badge.active { background: #238636; color: #e6edf3; }
+
+  /* ================================================================
+     DIVIDER
+     ================================================================ */
+  .section-divider {
+    width: 80%; max-width: 1100px; height: 1px;
+    background: linear-gradient(90deg, transparent, #30363d 20%, #30363d 80%, transparent);
+  }
+
+  /* ================================================================
+     TEXT SECTION (sentence → relation graph animation)
+     ================================================================ */
+  .text-section {
+    position: relative; width: 960px; height: 620px;
+  }
+
+  .stage-indicator {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; z-index: 10;
+  }
+  .stage-dot {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: #30363d; transition: all 0.5s ease;
+  }
+  .stage-dot.active { background: #58a6ff; box-shadow: 0 0 8px rgba(88,166,255,0.5); }
+  .stage-dot.done { background: #3fb950; }
+
+  .stage-label {
+    position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #8b949e; letter-spacing: 0.04em;
+    transition: all 0.5s ease; z-index: 10;
+  }
+
+  .main-container {
+    position: absolute; top: 60px; left: 0;
+    width: 960px; height: 480px;
+  }
+
+  canvas#textArrowCanvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; z-index: 1;
+  }
+
+  .word {
+    position: absolute;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 22px; font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    transition: left 1s cubic-bezier(0.34, 1.56, 0.64, 1),
+                top 1s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.6s ease,
+                color 0.6s ease,
+                opacity 0.5s ease,
+                transform 0.6s ease,
+                box-shadow 0.6s ease,
+                border-color 0.6s ease;
+    z-index: 2;
+    border: 1.5px solid transparent;
+    text-align: center;
+    min-width: 60px;
+  }
+
+  .word.default  { color: #c9d1d9; background: rgba(48,54,61,0.6); border-color: #30363d; }
+  .word.noun     { color: #ffa657; background: rgba(255,166,87,0.12); border-color: rgba(255,166,87,0.4); }
+  .word.verb     { color: #79c0ff; background: rgba(121,192,255,0.12); border-color: rgba(121,192,255,0.4); }
+  .word.adj      { color: #7ee787; background: rgba(126,231,135,0.12); border-color: rgba(126,231,135,0.4); }
+  .word.danger   { color: #ff4a4a; background: rgba(255,74,74,0.15); border-color: rgba(255,74,74,0.5);
+                   box-shadow: 0 0 20px rgba(255,74,74,0.3); animation: pulse-red 1.2s ease-in-out infinite; }
+  .word.fade-out { opacity: 0; transform: scale(0.7); pointer-events: none; }
+
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,74,74,0.3); }
+    50%      { box-shadow: 0 0 32px rgba(255,74,74,0.6); }
+  }
+
+  .vnode {
+    position: absolute;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 18px; font-weight: 600;
+    white-space: nowrap;
+    transition: left 0.8s ease, top 0.8s ease, opacity 0.5s ease;
+    border: 1.5px solid transparent;
+    z-index: 2; text-align: center;
+    min-width: 90px;
+  }
+  .vnode.entity  { color: #ffa657; background: rgba(255,166,87,0.10); border-color: rgba(255,166,87,0.35); }
+  .vnode.action  { color: #79c0ff; background: rgba(121,192,255,0.10); border-color: rgba(121,192,255,0.35); }
+  .vnode.danger  { color: #ff4a4a; background: rgba(255,74,74,0.15); border-color: rgba(255,74,74,0.5);
+                   box-shadow: 0 0 16px rgba(255,74,74,0.25); }
+  .vnode.hidden  { opacity: 0; transform: scale(0.7); pointer-events: none; }
+    .vnode.merged {
+      white-space: normal; line-height: 1.25;
+      font-size: 17px; padding: 6px 14px;
+    }
+    .vnode.merged .sub {
+      display: block; font-size: 0.72em;
+      opacity: 0.7; font-weight: 400;
+    }
+
+  .word.uniform {
+    min-width: 90px; padding: 8px 18px;
+    font-size: 18px;
+  }
+
+  .text-legend {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 24px; font-size: 13px; color: #8b949e;
+    opacity: 0; transition: opacity 0.8s ease; z-index: 10;
+  }
+  .text-legend.visible { opacity: 1; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+  .legend-dot.noun   { background: #ffa657; }
+  .legend-dot.verb   { background: #79c0ff; }
+  .legend-dot.adj    { background: #7ee787; }
+  .legend-dot.danger { background: #ff4a4a; }
+
+  .text-controls {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px; z-index: 10;
+  }
+  .ctrl-btn {
+    padding: 10px 28px; border-radius: 8px; border: 1px solid #30363d;
+    background: #161b22; color: #c9d1d9;
+    font-size: 15px; cursor: pointer; white-space: nowrap;
+    transition: all 0.25s ease;
+  }
+  .ctrl-btn:hover { border-color: #58a6ff; color: #e6edf3; background: #1c2333; }
+  .ctrl-btn:disabled { opacity: 0.35; cursor: default; }
+  .ctrl-btn.play { border-color: #3fb950; color: #3fb950; }
+</style>
+</head>
+<body>
+
+<!-- ==================================================================
+     VISUAL SECTION
+     ================================================================== -->
+<div class="visual-section">
+  <div class="layout">
+    <div class="video-col">
+      <video id="mainVideo" src="harmful_masked.mp4" controls muted playsinline></video>
+      <div style="margin-top:8px">
+        <span class="frame-badge" id="frameBadge">frame 1 / 141</span>
+        <span style="font-size:13px;color:#8b949e;margin-left:8px" id="annotLabel"></span>
+      </div>
+    </div>
+
+    <div class="graph-col">
+      <div class="graph-panel">
+        <h3>当前帧场景图</h3>
+        <div class="graph-stage" id="stageCurrent">
+          <canvas class="graph-canvas" id="canvasCurrent"></canvas>
+        </div>
+      </div>
+
+      <div class="graph-panel">
+        <h3>累计场景图</h3>
+        <div class="graph-stage" id="stageCumulative">
+          <canvas class="graph-canvas" id="canvasCumulative"></canvas>
+        </div>
+      </div>
+
+      <div class="visual-legend">
+        <span><span class="ldot entity"></span> 实体</span>
+        <span><span class="ldot action"></span> 关系/动作</span>
+        <span><span class="ldot danger"></span> 危险实体</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================
+     DIVIDER
+     ================================================================== -->
+<div class="section-divider"></div>
+
+<!-- ==================================================================
+     TEXT SECTION
+     ================================================================== -->
+<div class="text-section" id="textSection">
+  <div class="stage-indicator">
+    <div class="stage-dot" data-stage="0"></div>
+    <div class="stage-dot" data-stage="1"></div>
+    <div class="stage-dot" data-stage="2"></div>
+    <div class="stage-dot" data-stage="3"></div>
+    <div class="stage-dot" data-stage="4"></div>
+    <div class="stage-dot" data-stage="5"></div>
+  </div>
+  <div class="stage-label" id="stageLabel">完整句子</div>
+
+  <div class="main-container" id="container">
+    <canvas id="textArrowCanvas"></canvas>
+  </div>
+
+  <div class="text-legend" id="textLegend">
+    <span class="legend-item"><span class="legend-dot noun"></span> 名词</span>
+    <span class="legend-item"><span class="legend-dot verb"></span> 动词</span>
+    <span class="legend-item"><span class="legend-dot adj"></span> 形容词</span>
+    <span class="legend-item"><span class="legend-dot danger"></span> 危险实体</span>
+  </div>
+
+  <div class="text-controls">
+    <button class="ctrl-btn" id="btnPrev" onclick="prevStage()">← 上一步</button>
+    <button class="ctrl-btn play" id="btnPlay" onclick="toggleAutoPlay()">▶ 自动播放</button>
+    <button class="ctrl-btn" id="btnNext" onclick="nextStage()">下一步 →</button>
+    <button class="ctrl-btn" id="btnReset" onclick="resetAll()">↺ 重置</button>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+//  VISUAL SECTION — cumulative scene graph logic
+// ====================================================================
+const TOTAL_FRAMES = 141;
+const FPS = 24;
+
+const frameAnnotations = {};
+for (let f = 1; f <= 37; f++) frameAnnotations[f] = ['person1','gun'];
+for (let f = 38; f <= 51; f++) frameAnnotations[f] = ['gun'];
+for (let f = 91; f <= 141; f++) frameAnnotations[f] = ['person2'];
+
+function getAnnotations(frame) {
+  return frameAnnotations[frame] || [];
+}
+
+// ── visual graph rendering ──────────────────────────────────────
+function renderGraph(containerId, canvasId, nodeDefs, arrows) {
+  const container = document.getElementById(containerId);
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  container.querySelectorAll('.gnode').forEach(el => el.remove());
+
+  const ids = Object.keys(nodeDefs);
+  const measured = {};
+  ids.forEach(id => {
+    const def = nodeDefs[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + def.type;
+    el.textContent = def.label;
+    el.style.left = '-9999px';
+    container.appendChild(el);
+    measured[id] = { width: el.offsetWidth, height: el.offsetHeight };
+    el.remove();
+  });
+
+  const totalW = ids.reduce((s, id) => s + measured[id].width, 0);
+  let gap, startX;
+  if (ids.length <= 1) {
+    gap = 0; startX = Math.round((rect.width - totalW) / 2);
+  } else {
+    gap = Math.round((rect.width - totalW) / (ids.length - 1));
+    if (gap < 22) gap = 22;
+    startX = Math.round((rect.width - (totalW + gap * (ids.length - 1))) / 2);
+    if (startX < 8) startX = 8;
+  }
+
+  const positions = {};
+  let cx = startX;
+  ids.forEach(id => {
+    const w = measured[id].width;
+    positions[id] = { left: cx, top: 32, width: w, height: measured[id].height };
+    cx += w + gap;
+  });
+
+  ids.forEach(id => {
+    const def = nodeDefs[id];
+    const pos = positions[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + def.type;
+    el.textContent = def.label;
+    el.style.left = pos.left + 'px';
+    el.style.top = pos.top + 'px';
+    if (def.isNew) el.classList.add('new');
+    container.appendChild(el);
+  });
+
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  arrows.forEach(arrow => {
+    drawVisArrow(ctx, positions, arrow);
+  });
+}
+
+function drawVisArrow(ctx, positions, arrow) {
+  const a = positions[arrow.from];
+  const b = positions[arrow.to];
+  if (!a || !b) return;
+
+  const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  const bx = b.left + b.width / 2, by = b.top + b.height / 2;
+  const dx = bx - ax, dy = by - ay, len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+  const sx = ax + ux*(a.width/2+4), sy = ay + uy*(a.height/2+4);
+  const ex = bx - ux*(b.width/2+4), ey = by - uy*(b.height/2+4);
+
+  ctx.strokeStyle = '#8b949e'; ctx.lineWidth = 2;
+  if (arrow.dashed) ctx.setLineDash([3, 5]); else ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const headLen = 10, angle = Math.atan2(ey-sy, ex-sx);
+  ctx.fillStyle = '#8b949e';
+  ctx.beginPath(); ctx.moveTo(ex, ey);
+  ctx.lineTo(ex-headLen*Math.cos(angle-0.45), ey-headLen*Math.sin(angle-0.45));
+  ctx.lineTo(ex-headLen*Math.cos(angle+0.45), ey-headLen*Math.sin(angle+0.45));
+  ctx.closePath(); ctx.fill();
+}
+
+// ── current frame graph ─────────────────────────────────────────
+function getCurrentGraph(frame) {
+  const ann = getAnnotations(frame);
+  const nodes = {};
+  const arrows = [];
+
+  if (ann.includes('person1') && ann.includes('gun')) {
+    nodes['person1'] = { label: 'person1', type: 'entity' };
+    nodes['hold']   = { label: 'hold',    type: 'action' };
+    nodes['gun']    = { label: 'gun',     type: 'danger' };
+    arrows.push({ from: 'person1', to: 'hold' });
+    arrows.push({ from: 'hold',    to: 'gun' });
+  } else if (ann.includes('gun') && !ann.includes('person1') && !ann.includes('person2')) {
+    nodes['gun'] = { label: 'gun', type: 'danger' };
+  } else if (ann.includes('person2')) {
+    nodes['person2'] = { label: 'person2', type: 'entity' };
+  }
+
+  return { nodes, arrows };
+}
+
+// ── cumulative graph state ──────────────────────────────────────
+let cumulativePhase = 0;
+let cumNodes = {};
+let cumArrows = [];
+let cumTransitioning = false;
+
+function measureCumNode(label, type) {
+  const el = document.createElement('span');
+  el.className = 'gnode ' + type;
+  el.textContent = label;
+  el.style.left = '-9999px'; el.style.top = '-9999px';
+  document.getElementById('stageCumulative').appendChild(el);
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.remove();
+  return { w, h };
+}
+
+function layoutCumulative(ids, labels, types) {
+  const container = document.getElementById('stageCumulative');
+  const rect = container.getBoundingClientRect();
+  const measured = ids.map((id, i) => ({ id, ...measureCumNode(labels[i], types[i]) }));
+  const totalW = measured.reduce((s, m) => s + m.w, 0);
+  const n = ids.length;
+  let gap = n > 1 ? Math.round((rect.width - totalW) / (n - 1)) : 0;
+  if (gap < 22) gap = 22;
+  const startX = Math.max(8, Math.round((rect.width - (totalW + gap * (n - 1))) / 2));
+  const result = {};
+  let cx = startX;
+  measured.forEach(m => {
+    result[m.id] = { label: labels[ids.indexOf(m.id)], type: types[ids.indexOf(m.id)], left: cx, top: 32, width: m.w, height: m.h };
+    cx += m.w + gap;
+  });
+  return result;
+}
+
+function getDOMNodeRect(label) {
+  const container = document.getElementById('stageCumulative');
+  const cr = container.getBoundingClientRect();
+  const els = container.querySelectorAll('.gnode');
+  for (const el of els) {
+    if (el.textContent === label) {
+      const r = el.getBoundingClientRect();
+      return { left: r.left - cr.left, top: r.top - cr.top, width: r.width, height: r.height };
+    }
+  }
+  return null;
+}
+
+function drawCumulativeArrows() {
+  const canvas = document.getElementById('canvasCumulative');
+  const container = document.getElementById('stageCumulative');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  const labels = ['person1','hold','gun','point','person2'];
+  const pos = {};
+  labels.forEach(l => { const r = getDOMNodeRect(l); if (r) pos[l] = r; });
+
+  cumArrows.forEach(arrow => {
+    const a = pos[arrow.from], b = pos[arrow.to];
+    if (!a || !b) return;
+    const ax = a.left + a.width/2, ay = a.top + a.height/2;
+    const bx = b.left + b.width/2, by = b.top + b.height/2;
+    const dx = bx - ax, dy = by - ay, len = Math.sqrt(dx*dx+dy*dy);
+    if (len < 1) return;
+    const ux = dx/len, uy = dy/len;
+    const sx = ax + ux*(a.width/2+4), sy = ay + uy*(a.height/2+4);
+    const ex = bx - ux*(b.width/2+4), ey = by - uy*(b.height/2+4);
+
+    ctx.strokeStyle = '#8b949e'; ctx.lineWidth = 2;
+    if (arrow.dashed) ctx.setLineDash([3, 5]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const headLen = 10, angle = Math.atan2(ey-sy, ex-sx);
+    ctx.fillStyle = '#8b949e';
+    ctx.beginPath(); ctx.moveTo(ex, ey);
+    ctx.lineTo(ex-headLen*Math.cos(angle-0.45), ey-headLen*Math.sin(angle-0.45));
+    ctx.lineTo(ex-headLen*Math.cos(angle+0.45), ey-headLen*Math.sin(angle+0.45));
+    ctx.closePath(); ctx.fill();
+  });
+}
+
+function buildCumulativeDOM() {
+  const container = document.getElementById('stageCumulative');
+  container.querySelectorAll('.gnode').forEach(el => el.remove());
+  Object.entries(cumNodes).forEach(([id, n]) => {
+    const el = document.createElement('span');
+    el.className = 'gnode ' + n.type;
+    el.textContent = n.label;
+    el.style.left = n.left + 'px';
+    el.style.top = n.top + 'px';
+    if (n.isNew) el.classList.add('new');
+    container.appendChild(el);
+  });
+  drawCumulativeArrows();
+}
+
+function initCumulativeBasic() {
+  cumNodes = layoutCumulative(
+    ['person1','hold','gun'],
+    ['person1','hold','gun'],
+    ['entity','action','danger']
+  );
+  cumArrows = [
+    { from: 'person1', to: 'hold' },
+    { from: 'hold', to: 'gun' },
+  ];
+  buildCumulativeDOM();
+}
+
+function expandCumulative() {
+  if (cumTransitioning || cumulativePhase >= 1) return;
+  cumTransitioning = true;
+  cumulativePhase = 1;
+
+  const container = document.getElementById('stageCumulative');
+  const rect = container.getBoundingClientRect();
+
+  const allIds = ['person1','hold','gun','point','person2'];
+  const allLabels = ['person1','hold','gun','point','person2'];
+  const allTypes = ['entity','action','danger','action','entity'];
+
+  const measured = allIds.map((id, i) => ({ id, ...measureCumNode(allLabels[i], allTypes[i]) }));
+  const totalW = measured.reduce((s, m) => s + m.w, 0);
+  let gap = Math.round((rect.width - totalW) / 4);
+  if (gap < 22) gap = 22;
+  const startX = Math.max(8, Math.round((rect.width - (totalW + gap * 4)) / 2));
+
+  const target = {};
+  let cx = startX;
+  measured.forEach(m => {
+    target[m.id] = { left: cx, top: 32, width: m.w, height: m.h, label: allLabels[allIds.indexOf(m.id)], type: allTypes[allIds.indexOf(m.id)] };
+    cx += m.w + gap;
+  });
+
+  const newEls = {};
+  ['point','person2'].forEach(id => {
+    const t = target[id];
+    const el = document.createElement('span');
+    el.className = 'gnode ' + t.type;
+    el.textContent = t.label;
+    el.style.left = t.left + 'px';
+    el.style.top = t.top + 'px';
+    el.style.opacity = '0';
+    container.appendChild(el);
+    newEls[id] = el;
+  });
+
+  container.querySelectorAll('.gnode').forEach(el => {
+    if (newEls[el.textContent]) return;
+    const id = allIds.find(i => allLabels[allIds.indexOf(i)] === el.textContent);
+    if (id && target[id]) {
+      el.style.transition = 'left 0.6s ease';
+      el.style.left = target[id].left + 'px';
+    }
+  });
+
+  cumNodes = target;
+  cumArrows = [
+    { from: 'person1', to: 'hold' },
+    { from: 'hold', to: 'gun' },
+    { from: 'gun', to: 'point', dashed: true },
+    { from: 'point', to: 'person2', dashed: true },
+  ];
+
+  const duration = 600;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    Object.values(newEls).forEach(el => { el.style.opacity = Math.min(1, t * 2); });
+    drawCumulativeArrows();
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      Object.values(newEls).forEach(el => { el.style.opacity = '1'; });
+      drawCumulativeArrows();
+      cumTransitioning = false;
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function updateForFrame(frame) {
+  document.getElementById('frameBadge').textContent = `frame ${frame} / ${TOTAL_FRAMES}`;
+  const ann = getAnnotations(frame);
+  document.getElementById('annotLabel').textContent =
+    ann.length ? '标注: ' + ann.join(', ') : '(无实体)';
+
+  const cur = getCurrentGraph(frame);
+  renderGraph('stageCurrent', 'canvasCurrent', cur.nodes, cur.arrows);
+
+  if (frame >= 91 && cumulativePhase < 1) {
+    expandCumulative();
+  }
+}
+
+// ── video sync ──────────────────────────────────────────────────
+const video = document.getElementById('mainVideo');
+
+function resetCumulative() {
+  cumulativePhase = 0;
+  cumTransitioning = false;
+  cumNodes = {};
+  cumArrows = [];
+  initCumulativeBasic();
+}
+
+video.addEventListener('timeupdate', () => {
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  if (frame < 10 && cumulativePhase >= 1) resetCumulative();
+  updateForFrame(frame);
+});
+
+video.addEventListener('seeked', () => {
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  if (frame < 10 && cumulativePhase >= 1) resetCumulative();
+  updateForFrame(frame);
+});
+
+// ── visual section init ─────────────────────────────────────────
+initCumulativeBasic();
+updateForFrame(1);
+
+// ====================================================================
+//  TEXT SECTION — sentence → relation graph animation
+// ====================================================================
+const tokens = [
+  { id: 'the1',   text: 'The',    type: 'filler' },
+  { id: 'man',    text: 'man',    type: 'noun'   },
+  { id: 'robs',   text: 'robs',   type: 'verb'   },
+  { id: 'the2',   text: 'the',    type: 'filler' },
+  { id: 'woman',  text: 'woman',  type: 'noun'   },
+  { id: 'using',  text: 'using',  type: 'verb'   },
+  { id: 'the3',   text: 'the',    type: 'filler' },
+  { id: 'real',   text: 'real',   type: 'adj'    },
+  { id: 'gun',    text: 'gun',    type: 'noun'   },
+];
+
+const sentenceOrder = ['the1','man','robs','the2','woman','using','the3','real','gun'];
+const chainTopOrder  = ['gun','using','man','robs','woman'];
+
+const arrowDefs = {
+  3: [
+    { from: 'using', to: 'gun'  },
+    { from: 'man',   to: 'using'},
+    { from: 'man',   to: 'robs'},
+    { from: 'robs',  to: 'woman'},
+    { from: 'real',  to: 'gun'  },
+  ],
+};
+
+let currentStage = 0;
+let autoPlayTimer = null;
+let textRedrawTimer = null;
+let isAutoPlaying = false;
+const totalStages = 5;
+const textContainer = document.getElementById('container');
+const textCanvas = document.getElementById('textArrowCanvas');
+const textCtx = textCanvas.getContext('2d');
+
+// create word elements
+const wordEls = {};
+tokens.forEach(w => {
+  const el = document.createElement('span');
+  el.className = 'word default';
+  el.textContent = w.text;
+  el.id = 'word-' + w.id;
+  el.style.opacity = '0';
+  el.style.left = '0px';
+  el.style.top = '0px';
+  textContainer.appendChild(el);
+  wordEls[w.id] = el;
+});
+
+// create visual cumulative nodes for stage 5 cross-source alignment
+const vnodeDefs = [
+  { id: 'v-person1', label: 'person1', type: 'entity' },
+  { id: 'v-hold',    label: 'hold',    type: 'action' },
+  { id: 'v-gun',     label: 'gun',     type: 'danger' },
+  { id: 'v-point',   label: 'point',   type: 'action' },
+  { id: 'v-person2', label: 'person2', type: 'entity' },
+];
+const vnodeEls = {};
+vnodeDefs.forEach(def => {
+  const el = document.createElement('span');
+  el.className = 'vnode hidden ' + def.type;
+  el.textContent = def.label;
+  el.id = def.id;
+  el.style.opacity = '0';
+  el.style.left = '0px';
+  el.style.top = '0px';
+  textContainer.appendChild(el);
+  vnodeEls[def.id] = el;
+});
+
+function textResizeCanvas() {
+  const rect = textContainer.getBoundingClientRect();
+  textCanvas.width = rect.width * devicePixelRatio;
+  textCanvas.height = rect.height * devicePixelRatio;
+  textCanvas.style.width = rect.width + 'px';
+  textCanvas.style.height = rect.height + 'px';
+  textCtx.setTransform(1, 0, 0, 1, 0, 0);
+  textCtx.scale(devicePixelRatio, devicePixelRatio);
+}
+textResizeCanvas();
+
+// ── text arrow drawing ──────────────────────────────────────────
+function getWordRect(id) {
+  const el = wordEls[id];
+  if (!el) return null;
+  const left = parseFloat(el.style.left) || 0;
+  const top  = parseFloat(el.style.top)  || 0;
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  return {
+    left, top,
+    right:  left + w,
+    bottom: top + h,
+    cx:     left + w / 2,
+    cy:     top + h / 2,
+  };
+}
+
+function rayRectExit(px, py, dx, dy, rect, padding) {
+  let tMin = Infinity;
+  const pad = padding || 0;
+  const r = {
+    left:   rect.left - pad,
+    top:    rect.top - pad,
+    right:  rect.right + pad,
+    bottom: rect.bottom + pad,
+  };
+  if (Math.abs(dx) > 1e-9) {
+    for (const edgeX of [r.left, r.right]) {
+      const t = (edgeX - px) / dx;
+      if (t > 1e-9) { const y = py + t * dy; if (y >= r.top && y <= r.bottom) tMin = Math.min(tMin, t); }
+    }
+  }
+  if (Math.abs(dy) > 1e-9) {
+    for (const edgeY of [r.top, r.bottom]) {
+      const t = (edgeY - py) / dy;
+      if (t > 1e-9) { const x = px + t * dx; if (x >= r.left && x <= r.right) tMin = Math.min(tMin, t); }
+    }
+  }
+  if (tMin === Infinity) return { x: px, y: py };
+  return { x: px + tMin * dx, y: py + tMin * dy };
+}
+
+function drawTextArrow(from, to) {
+  const rectA = getWordRect(from);
+  const rectB = getWordRect(to);
+  if (!rectA || !rectB) return;
+
+  const dx = rectB.cx - rectA.cx;
+  const dy = rectB.cy - rectA.cy;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+
+  const ux = dx / len, uy = dy / len;
+  const start = rayRectExit(rectA.cx, rectA.cy, ux, uy, rectA, -2);
+  const end   = rayRectExit(rectB.cx, rectB.cy, -ux, -uy, rectB, -2);
+  const headLen = 14;
+
+  textCtx.strokeStyle = '#8b949e';
+  textCtx.lineWidth = 2;
+  textCtx.beginPath();
+  textCtx.moveTo(start.x, start.y);
+  textCtx.lineTo(end.x, end.y);
+  textCtx.stroke();
+
+  textCtx.fillStyle = '#8b949e';
+  textCtx.beginPath();
+  textCtx.moveTo(end.x, end.y);
+  textCtx.lineTo(
+    end.x - headLen * Math.cos(Math.atan2(end.y - start.y, end.x - start.x) - 0.45),
+    end.y - headLen * Math.sin(Math.atan2(end.y - start.y, end.x - start.x) - 0.45)
+  );
+  textCtx.lineTo(
+    end.x - headLen * Math.cos(Math.atan2(end.y - start.y, end.x - start.x) + 0.45),
+    end.y - headLen * Math.sin(Math.atan2(end.y - start.y, end.x - start.x) + 0.45)
+  );
+  textCtx.closePath();
+  textCtx.fill();
+}
+
+function drawTextArrows(stage) {
+  textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+  const defs = arrowDefs[stage];
+  if (!defs) return;
+  defs.forEach(a => drawTextArrow(a.from, a.to));
+}
+
+// ── text layout ─────────────────────────────────────────────────
+const CTN_W = 960;
+
+function wWidth(id) { return wordEls[id].offsetWidth; }
+
+function layoutRow(ids, targetGap, y) {
+  const widths = ids.map(id => wWidth(id));
+  const totalW = widths.reduce((a, b) => a + b, 0) + targetGap * (ids.length - 1);
+  const positions = {};
+  let x = Math.round((CTN_W - totalW) / 2);
+  ids.forEach((id, i) => {
+    positions[id] = { left: x, top: y };
+    x += widths[i] + targetGap;
+  });
+  return positions;
+}
+
+// ── visual node rect helper ─────────────────────────────────────
+function getVNodeRect(id) {
+  const el = vnodeEls[id];
+  if (!el) return null;
+  const left = parseFloat(el.style.left) || 0;
+  const top  = parseFloat(el.style.top)  || 0;
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  return { left, top, right: left + w, bottom: top + h, cx: left + w/2, cy: top + h/2 };
+}
+
+// ── bidirectional arrow between two rects ────────────────────────
+function drawBidirectionalArrow(ctx, topRect, bottomRect, color) {
+  const x1 = topRect.cx, y1 = topRect.bottom + 6;
+  const x2 = bottomRect.cx, y2 = bottomRect.top - 6;
+  const dx = x2 - x1, dy = y2 - y1, len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+  const headLen = 10;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = color;
+  // arrowhead at bottom (pointing down, toward text)
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen*Math.cos(Math.atan2(dy,dx) - 0.45), y2 - headLen*Math.sin(Math.atan2(dy,dx) - 0.45));
+  ctx.lineTo(x2 - headLen*Math.cos(Math.atan2(dy,dx) + 0.45), y2 - headLen*Math.sin(Math.atan2(dy,dx) + 0.45));
+  ctx.closePath();
+  ctx.fill();
+
+  // arrowhead at top (pointing up, toward visual)
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 + headLen*Math.cos(Math.atan2(dy,dx) - 0.45), y1 + headLen*Math.sin(Math.atan2(dy,dx) - 0.45));
+  ctx.lineTo(x1 + headLen*Math.cos(Math.atan2(dy,dx) + 0.45), y1 + headLen*Math.sin(Math.atan2(dy,dx) + 0.45));
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── fusion arrows for stage 5 ────────────────────────────────────
+const visPairs = [
+  { from: 'v-person1', to: 'v-hold' },
+  { from: 'v-hold',    to: 'v-gun' },
+  { from: 'v-gun',     to: 'v-point',   dashed: true },
+  { from: 'v-point',   to: 'v-person2', dashed: true },
+];
+const textPairs = [
+  { from: 'using', to: 'gun' },
+  { from: 'man',   to: 'using' },
+  { from: 'man',   to: 'robs' },
+  { from: 'robs',  to: 'woman' },
+  { from: 'real',  to: 'gun' },
+];
+const crossPairs = [
+  { v: 'v-gun',     t: 'gun' },
+  { v: 'v-person1', t: 'man' },
+  { v: 'v-person2', t: 'woman' },
+];
+
+function drawOneArrow(fromRect, toRect, dashed) {
+  const dx = toRect.cx - fromRect.cx, dy = toRect.cy - fromRect.cy, len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+  const start = rayRectExit(fromRect.cx, fromRect.cy, ux, uy, fromRect, -2);
+  const end   = rayRectExit(toRect.cx, toRect.cy, -ux, -uy, toRect, -2);
+  const headLen = 14;
+
+  textCtx.strokeStyle = '#8b949e'; textCtx.lineWidth = 2;
+  if (dashed) textCtx.setLineDash([3, 5]); else textCtx.setLineDash([]);
+  textCtx.beginPath(); textCtx.moveTo(start.x, start.y); textCtx.lineTo(end.x, end.y); textCtx.stroke();
+  textCtx.setLineDash([]);
+
+  textCtx.fillStyle = '#8b949e';
+  textCtx.beginPath(); textCtx.moveTo(end.x, end.y);
+  textCtx.lineTo(end.x - headLen*Math.cos(Math.atan2(end.y-start.y, end.x-start.x) - 0.45), end.y - headLen*Math.sin(Math.atan2(end.y-start.y, end.x-start.x) - 0.45));
+  textCtx.lineTo(end.x - headLen*Math.cos(Math.atan2(end.y-start.y, end.x-start.x) + 0.45), end.y - headLen*Math.sin(Math.atan2(end.y-start.y, end.x-start.x) + 0.45));
+  textCtx.closePath(); textCtx.fill();
+}
+
+function drawLayerArrows() {
+  textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+
+  visPairs.forEach(pair => {
+    const a = getVNodeRect(pair.from), b = getVNodeRect(pair.to);
+    if (!a || !b) return;
+    drawOneArrow(a, b, pair.dashed);
+  });
+
+  textPairs.forEach(pair => {
+    const a = getWordRect(pair.from), b = getWordRect(pair.to);
+    if (!a || !b) return;
+    drawOneArrow(a, b, false);
+  });
+}
+
+function drawFusionArrows() {
+  drawLayerArrows();
+
+  // cross-source bidirectional arrows — added last
+  const crossColor = '#58a6ff';
+  crossPairs.forEach(pair => {
+    const vr = getVNodeRect(pair.v);
+    const tr = getWordRect(pair.t);
+    if (!vr || !tr) return;
+    drawBidirectionalArrow(textCtx, vr, tr, crossColor);
+  });
+}
+
+// ── stage 5 two-phase fusion ───────────────────────────────────
+let stage5Phase = 0;          // 0=inactive, 1=visual only, 2=full fusion
+let stage5PhaseTimer = null;
+
+function drawVisualAndTextArrows() {
+  textResizeCanvas();
+  textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+
+  visPairs.forEach(pair => {
+    const a = getVNodeRect(pair.from), b = getVNodeRect(pair.to);
+    if (!a || !b) return;
+    drawOneArrow(a, b, pair.dashed);
+  });
+
+  textPairs.forEach(pair => {
+    const a = getWordRect(pair.from), b = getWordRect(pair.to);
+    if (!a || !b) return;
+    drawOneArrow(a, b, false);
+  });
+}
+
+function applyStage5TwoPhase() {
+  // clear any pending transition
+  if (stage5PhaseTimer) clearTimeout(stage5PhaseTimer);
+
+  // measure visual nodes
+  const vMeasured = {};
+  vnodeDefs.forEach(def => {
+    const el = vnodeEls[def.id];
+    el.classList.remove('hidden');
+    el.style.opacity = '1';
+    vMeasured[def.id] = el.offsetWidth;
+  });
+
+  // show visual nodes — reset text & style
+  vnodeDefs.forEach(def => {
+    const el = vnodeEls[def.id];
+    el.textContent = def.label;
+    el.classList.remove('merged');
+    el.style.whiteSpace = 'nowrap';
+    el.style.fontSize = '';
+    el.style.padding = '';
+    el.style.lineHeight = '';
+    el.style.opacity = '1';
+    el.classList.remove('hidden');
+  });
+
+  // Phase 1: keep text nodes at stage-4 chain layout, show visual nodes in natural layout
+  // text: stage 4 chain layout (y=160) with real below gun (y=280)
+  const textPosP1 = layoutRow(chainTopOrder, 90, 160);
+  const gunCenterP1 = textPosP1['gun'].left + wWidth('gun') / 2;
+  const realWP1 = wWidth('real');
+  textPosP1['real'] = { left: Math.round(gunCenterP1 - realWP1 / 2), top: 280 };
+
+  tokens.forEach(w => {
+    wordEls[w.id].classList.add('uniform');
+    if (w.type === 'filler') {
+      wordEls[w.id].style.opacity = '0';
+      wordEls[w.id].style.transform = 'scale(0.7)';
+    } else {
+      wordEls[w.id].style.opacity = '1';
+      wordEls[w.id].style.transform = 'scale(1)';
+      wordEls[w.id].classList.remove('default', 'noun', 'verb', 'adj', 'danger', 'fade-out');
+      if (w.id === 'gun') wordEls[w.id].classList.add('danger');
+      else wordEls[w.id].classList.add(w.type);
+    }
+  });
+  Object.entries(textPosP1).forEach(([id, pos]) => {
+    const el = wordEls[id];
+    el.style.left = pos.left + 'px';
+    el.style.top  = pos.top + 'px';
+  });
+
+  // visual: natural cumulative row (y=100)
+  const naturalOrder = ['v-person1','v-hold','v-gun','v-point','v-person2'];
+  const totalW = naturalOrder.reduce((s, id) => s + vMeasured[id], 0);
+  const natGap = Math.max(18, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)));
+  const natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2);
+  const natY = 100;
+  let cx = natStartX;
+  naturalOrder.forEach(id => {
+    vnodeEls[id].style.left = cx + 'px';
+    vnodeEls[id].style.top = natY + 'px';
+    cx += vMeasured[id] + natGap;
+  });
+
+  // ensure vnode classes
+  vnodeDefs.forEach(def => {
+    const el = vnodeEls[def.id];
+    el.classList.remove('entity', 'action', 'danger');
+    el.classList.add(def.type);
+  });
+
+  drawVisualAndTextArrows();
+  stage5Phase = 1;
+
+  // UI updates
+  document.querySelectorAll('.stage-dot').forEach((dot, i) => {
+    dot.classList.remove('active', 'done');
+    if (i < 4) dot.classList.add('done');
+    if (i === 4) dot.classList.add('active');
+  });
+  document.getElementById('stageLabel').textContent = '跨源对齐融合 — 视觉场景图';
+  document.getElementById('textLegend').classList.add('visible');
+  currentStage = 4;
+  updateButtons();
+
+  // schedule Phase 2
+  stage5PhaseTimer = setTimeout(() => applyStage5Phase2(), 1800);
+}
+
+function applyStage5Phase2() {
+  stage5Phase = 2;
+
+  // compute target text positions (fusion layout)
+  const targetT = layoutRow(chainTopOrder, 60, 230);
+  const gunCenter = targetT['gun'].left + wWidth('gun') / 2;
+  const realW = wWidth('real');
+  targetT['real'] = { left: Math.round(gunCenter - realW / 2), top: 330 };
+
+  // record starting text positions (current DOM)
+  const startT = {};
+  ['gun','using','man','robs','woman','real'].forEach(id => {
+    startT[id] = {
+      left: parseFloat(wordEls[id].style.left) || 0,
+      top: parseFloat(wordEls[id].style.top) || 0,
+    };
+  });
+
+  // compute target visual positions (fusion layout)
+  const textGunX = targetT['gun'].left + wWidth('gun') / 2;
+  const textManX = targetT['man'].left + wWidth('man') / 2;
+  const textWomanX = targetT['woman'].left + wWidth('woman') / 2;
+  const vMeasured = {};
+  vnodeDefs.forEach(def => { vMeasured[def.id] = vnodeEls[def.id].offsetWidth; });
+
+  const pointMidX = (textGunX + textWomanX) / 2;
+  const targetV = {};
+  targetV['v-point']   = { left: Math.round(pointMidX - vMeasured['v-point']/2),   top: 40 };
+  targetV['v-person1'] = { left: Math.round(textManX - vMeasured['v-person1']/2), top: 120 };
+  targetV['v-gun']     = { left: Math.round(textGunX - vMeasured['v-gun']/2),     top: 120 };
+  targetV['v-person2'] = { left: Math.round(textWomanX - vMeasured['v-person2']/2), top: 120 };
+  const holdMidX = (targetV['v-person1'].left + vMeasured['v-person1']/2 + targetV['v-gun'].left + vMeasured['v-gun']/2)/2;
+  targetV['v-hold']    = { left: Math.round(holdMidX - vMeasured['v-hold']/2),    top: 120 };
+
+  // record starting visual positions
+  const startV = {};
+  Object.keys(targetV).forEach(id => {
+    startV[id] = {
+      left: parseFloat(vnodeEls[id].style.left) || 0,
+      top: parseFloat(vnodeEls[id].style.top) || 0,
+    };
+  });
+
+  // disable CSS transitions during JS animation
+  const allAnimEls = [...Object.keys(targetV).map(id => vnodeEls[id]),
+                      ...Object.keys(startT).map(id => wordEls[id])];
+  const savedTransitions = allAnimEls.map(el => el.style.transition);
+  allAnimEls.forEach(el => el.style.transition = 'none');
+
+  // animate both visual and text nodes together
+  const duration = 800;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    // easeInOutCubic
+    const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+
+    // interpolate visual nodes
+    Object.keys(targetV).forEach(id => {
+      const s = startV[id], tg = targetV[id];
+      vnodeEls[id].style.left = (s.left + (tg.left - s.left) * e) + 'px';
+      vnodeEls[id].style.top  = (s.top  + (tg.top  - s.top)  * e) + 'px';
+    });
+
+    // interpolate text nodes
+    Object.keys(startT).forEach(id => {
+      const s = startT[id], tg = targetT[id];
+      wordEls[id].style.left = (s.left + (tg.left - s.left) * e) + 'px';
+      wordEls[id].style.top  = (s.top  + (tg.top  - s.top)  * e) + 'px';
+    });
+
+    drawLayerArrows();
+
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      // finalize positions
+      Object.keys(targetV).forEach(id => {
+        vnodeEls[id].style.left = targetV[id].left + 'px';
+        vnodeEls[id].style.top  = targetV[id].top + 'px';
+      });
+      Object.keys(targetT).forEach(id => {
+        wordEls[id].style.left = targetT[id].left + 'px';
+        wordEls[id].style.top  = targetT[id].top + 'px';
+      });
+      // restore CSS transitions
+      allAnimEls.forEach((el, i) => { el.style.transition = savedTransitions[i]; });
+      // cross-source bidirectional arrows appear last
+      drawFusionArrows();
+      document.getElementById('stageLabel').textContent = '跨源对齐融合';
+      document.getElementById('textLegend').classList.add('visible');
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// ── stage 5: two-phase node merge ───────────────────────────────
+function applyStage5Merge() {
+  if (stage5PhaseTimer) { clearTimeout(stage5PhaseTimer); stage5PhaseTimer = null; }
+  stage5Phase = 0;
+  currentStage = 5;
+
+  // Reset visual nodes to original appearance
+  vnodeDefs.forEach(def => {
+    const el = vnodeEls[def.id];
+    el.style.opacity = '1';
+    el.classList.remove('hidden', 'merged');
+    el.textContent = def.label;
+    el.style.whiteSpace = 'nowrap';
+    el.style.fontSize = '';
+    el.style.padding = '';
+    el.style.lineHeight = '';
+  });
+
+  // Ensure all text nodes are visible
+  ['gun','using','man','robs','woman','real'].forEach(id => {
+    wordEls[id].style.opacity = '1';
+    wordEls[id].style.transform = 'scale(1)';
+    wordEls[id].classList.add('uniform');
+  });
+
+  // Record start positions
+  const startV = {};
+  ['v-person1','v-hold','v-gun','v-point','v-person2'].forEach(id => {
+    startV[id] = {
+      left: parseFloat(vnodeEls[id].style.left) || 0,
+      top: parseFloat(vnodeEls[id].style.top) || 0,
+    };
+  });
+
+  const startT = {};
+  ['gun','using','man','robs','woman','real'].forEach(id => {
+    startT[id] = {
+      left: parseFloat(wordEls[id].style.left) || 0,
+      top: parseFloat(wordEls[id].style.top) || 0,
+    };
+  });
+
+  // Merged text templates
+  const mergeTexts = {
+    'v-person1': 'person1<br><span class="sub">(man)</span>',
+    'v-hold':    'hold<br><span class="sub">(use)</span>',
+    'v-gun':     'gun',
+    'v-point':   'point',
+    'v-person2': 'person2<br><span class="sub">(woman)</span>',
+  };
+
+  // Measure merged node widths
+  const origHTMLs = {};
+  vnodeDefs.forEach(def => {
+    origHTMLs[def.id] = vnodeEls[def.id].innerHTML;
+    if (mergeTexts[def.id]) {
+      vnodeEls[def.id].innerHTML = mergeTexts[def.id];
+      vnodeEls[def.id].classList.add('merged');
+    }
+  });
+  const mergedW = {};
+  vnodeDefs.forEach(def => { mergedW[def.id] = vnodeEls[def.id].offsetWidth; });
+  // Restore
+  vnodeDefs.forEach(def => {
+    vnodeEls[def.id].innerHTML = origHTMLs[def.id];
+    vnodeEls[def.id].classList.remove('merged');
+  });
+
+  const mergeMap = { 'man':'v-person1', 'using':'v-hold', 'gun':'v-gun', 'woman':'v-person2' };
+  const mainOrder = ['v-person1','v-hold','v-gun','v-point','v-person2'];
+
+  // ═══ Phase 1 — converge pairs & fuse ═══
+  // Each visual↔text pair converges to a midpoint, then visual takes merged text
+  const midV = {};
+  mainOrder.forEach(id => {
+    if (id === 'v-point') {
+      midV[id] = { left: startV[id].left, top: 55 };
+    } else {
+      const tId = Object.keys(mergeMap).find(k => mergeMap[k] === id);
+      const tx = tId ? startT[tId].left + wWidth(tId)/2 : startV[id].left;
+      const midX = Math.round((startV[id].left + (tId ? startT[tId].left : startV[id].left)) / 2);
+      midV[id] = { left: midX, top: 175 };
+    }
+  });
+
+  const midT = {};
+  Object.keys(mergeMap).forEach(tId => {
+    const vId = mergeMap[tId];
+    midT[tId] = { left: midV[vId].left, top: 175 };
+  });
+  // robs & real stay independent
+  midT['robs'] = { left: startT['robs'].left, top: 170 };
+  midT['real'] = { left: startT['real'].left, top: 290 };
+
+  // Disable CSS transitions
+  const animVIds = Object.keys(midV);
+  const animTIds = Object.keys(midT);
+  const allAnimEls = [...animVIds.map(id => vnodeEls[id]), ...animTIds.map(id => wordEls[id])];
+  const savedTransitions = allAnimEls.map(el => el.style.transition);
+  allAnimEls.forEach(el => el.style.transition = 'none');
+
+  const dur1 = 700;
+  const t0 = performance.now();
+
+  function tick1(now) {
+    const t = Math.min(1, (now - t0) / dur1);
+    const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+
+    animVIds.forEach(id => {
+      const s = startV[id], m = midV[id];
+      vnodeEls[id].style.left = (s.left + (m.left - s.left) * e) + 'px';
+      vnodeEls[id].style.top  = (s.top  + (m.top  - s.top)  * e) + 'px';
+    });
+    animTIds.forEach(id => {
+      const s = startT[id], m = midT[id];
+      wordEls[id].style.left = (s.left + (m.left - s.left) * e) + 'px';
+      wordEls[id].style.top  = (s.top  + (m.top  - s.top)  * e) + 'px';
+    });
+
+    textResizeCanvas();
+    textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+    visPairs.forEach(p => {
+      const a = getVNodeRect(p.from), b = getVNodeRect(p.to);
+      if (a && b) drawOneArrow(a, b, p.dashed);
+    });
+    textPairs.forEach(p => {
+      const a = getWordRect(p.from), b = getWordRect(p.to);
+      if (a && b) drawOneArrow(a, b, false);
+    });
+
+    if (t < 1) { requestAnimationFrame(tick1); }
+    else { finishPhase1(); }
+  }
+
+  // ── Fuse pairs at end of Phase 1 ──────────────────────────────
+  function finishPhase1() {
+    animVIds.forEach(id => {
+      vnodeEls[id].style.left = midV[id].left + 'px';
+      vnodeEls[id].style.top  = midV[id].top + 'px';
+    });
+    animTIds.forEach(id => {
+      wordEls[id].style.left = midT[id].left + 'px';
+      wordEls[id].style.top  = midT[id].top + 'px';
+    });
+
+    // Fuse: visual nodes get merged text; paired text nodes hide
+    vnodeDefs.forEach(def => {
+      if (mergeTexts[def.id]) {
+        vnodeEls[def.id].innerHTML = mergeTexts[def.id];
+        vnodeEls[def.id].classList.add('merged');
+      }
+    });
+    Object.keys(mergeMap).forEach(tId => {
+      wordEls[tId].style.opacity = '0';
+      wordEls[tId].style.transform = 'scale(0.7)';
+    });
+
+    // Pause briefly then start Phase 2
+    setTimeout(startPhase2, 400);
+  }
+
+  // ═══ Phase 2 — move merged nodes to final layout ═══
+  function startPhase2() {
+    // Re-measure after text change (widths may have shifted)
+    const p2MergedW = {};
+    vnodeDefs.forEach(def => { p2MergedW[def.id] = vnodeEls[def.id].offsetWidth; });
+
+    const p2StartV = {};
+    animVIds.forEach(id => {
+      p2StartV[id] = { left: parseFloat(vnodeEls[id].style.left), top: parseFloat(vnodeEls[id].style.top) };
+    });
+    const p2StartT = {};
+    ['robs','real'].forEach(id => {
+      p2StartT[id] = { left: parseFloat(wordEls[id].style.left), top: parseFloat(wordEls[id].style.top) };
+    });
+
+    // Final layout
+    const mainY = 160, mainGap = 36;
+    const mainTotalW = mainOrder.reduce((s, id) => s + p2MergedW[id], 0) + mainGap * (mainOrder.length - 1);
+    const mainStartX = Math.round((CTN_W - mainTotalW) / 2);
+
+    const finalV = {};
+    let cx = mainStartX;
+    mainOrder.forEach(id => {
+      finalV[id] = { left: cx, top: mainY };
+      cx += p2MergedW[id] + mainGap;
+    });
+
+    const finalT = {};
+    const p1cx = finalV['v-person1'].left + p2MergedW['v-person1'] / 2;
+    const p2cx = finalV['v-person2'].left + p2MergedW['v-person2'] / 2;
+    finalT['robs'] = { left: Math.round((p1cx + p2cx)/2 - wWidth('robs')/2), top: 80 };
+    const gunCx = finalV['v-gun'].left + p2MergedW['v-gun'] / 2;
+    finalT['real'] = { left: Math.round(gunCx - wWidth('real')/2), top: 270 };
+
+    const p2AnimVIds = Object.keys(finalV);
+    const p2AnimTIds = Object.keys(finalT);
+
+    const dur2 = 700;
+    const t1 = performance.now();
+
+    function tick2(now) {
+      const t = Math.min(1, (now - t1) / dur2);
+      const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+
+      p2AnimVIds.forEach(id => {
+        const s = p2StartV[id], f = finalV[id];
+        vnodeEls[id].style.left = (s.left + (f.left - s.left) * e) + 'px';
+        vnodeEls[id].style.top  = (s.top  + (f.top  - s.top)  * e) + 'px';
+      });
+      p2AnimTIds.forEach(id => {
+        const s = p2StartT[id], f = finalT[id];
+        wordEls[id].style.left = (s.left + (f.left - s.left) * e) + 'px';
+        wordEls[id].style.top  = (s.top  + (f.top  - s.top)  * e) + 'px';
+      });
+
+      // During Phase 2 only draw visual arrows (text arrows gone after fuse)
+      textResizeCanvas();
+      textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+      visPairs.forEach(p => {
+        const a = getVNodeRect(p.from), b = getVNodeRect(p.to);
+        if (a && b) drawOneArrow(a, b, p.dashed);
+      });
+
+      if (t < 1) { requestAnimationFrame(tick2); }
+      else {
+        p2AnimVIds.forEach(id => {
+          vnodeEls[id].style.left = finalV[id].left + 'px';
+          vnodeEls[id].style.top  = finalV[id].top + 'px';
+        });
+        p2AnimTIds.forEach(id => {
+          wordEls[id].style.left = finalT[id].left + 'px';
+          wordEls[id].style.top  = finalT[id].top + 'px';
+        });
+
+        // Restore CSS transitions
+        allAnimEls.forEach((el, i) => { el.style.transition = savedTransitions[i]; });
+
+        drawMergedArrows();
+        document.getElementById('stageLabel').textContent = '跨源节点合并';
+      }
+    }
+
+    requestAnimationFrame(tick2);
+    document.getElementById('stageLabel').textContent = '跨源节点合并 — 构建合并中...';
+  }
+
+  requestAnimationFrame(tick1);
+
+  // UI indicators
+  document.querySelectorAll('.stage-dot').forEach((dot, i) => {
+    dot.classList.remove('active', 'done');
+    if (i < 5) dot.classList.add('done');
+    if (i === 5) dot.classList.add('active');
+  });
+  document.getElementById('stageLabel').textContent = '跨源节点合并 — 拉近融合中...';
+  document.getElementById('textLegend').classList.add('visible');
+  updateButtons();
+}
+
+// ── merged graph arrow drawing ───────────────────────────────────
+function getAnyRect(id) {
+  if (id.startsWith('v-')) return getVNodeRect(id);
+  return getWordRect(id);
+}
+
+function drawMergedArrows() {
+  textResizeCanvas();
+  textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+
+  // Visual-to-visual arrows
+  [
+    { from: 'v-person1', to: 'v-hold' },
+    { from: 'v-hold',    to: 'v-gun' },
+    { from: 'v-gun',     to: 'v-point',   dashed: true },
+    { from: 'v-point',   to: 'v-person2', dashed: true },
+  ].forEach(p => {
+    const a = getVNodeRect(p.from), b = getVNodeRect(p.to);
+    if (a && b) drawOneArrow(a, b, p.dashed);
+  });
+
+  // Cross-type arrows (merged visual ↔ remaining text)
+  [
+    { from: 'v-person1', to: 'robs' },
+    { from: 'robs',      to: 'v-person2' },
+    { from: 'real',      to: 'v-gun' },
+  ].forEach(p => {
+    const a = getAnyRect(p.from), b = getAnyRect(p.to);
+    if (a && b) drawOneArrow(a, b, false);
+  });
+}
+
+function resetStage5Phase() {
+  stage5Phase = 0;
+  if (stage5PhaseTimer) { clearTimeout(stage5PhaseTimer); stage5PhaseTimer = null; }
+}
+
+// ── text stage application ──────────────────────────────────────
+function applyStage(stage) {
+  if (stage < 5) resetStage5Phase();
+  currentStage = stage;
+
+  wordEls['using'].textContent = stage >= 3 ? 'use' : 'using';
+
+  const visible = {};
+  tokens.forEach(w => {
+    if (w.type === 'filler' && stage >= 2) visible[w.id] = false;
+    else if (w.id === 'using' && stage >= 4) visible[w.id] = true;
+    else visible[w.id] = true;
+  });
+
+  tokens.forEach(w => {
+    const el = wordEls[w.id];
+    if (visible[w.id]) {
+      el.style.opacity = '1'; el.style.transform = 'scale(1)';
+    } else {
+      el.style.opacity = '0'; el.style.transform = 'scale(0.7)';
+    }
+  });
+
+  let positions;
+  if (stage <= 2) {
+    positions = layoutRow(sentenceOrder, 22, 160);
+  } else if (stage === 3) {
+    positions = layoutRow(chainTopOrder, 90, 160);
+    const gunCenter = positions['gun'].left + wWidth('gun') / 2;
+    const realW = wWidth('real');
+    positions['real'] = { left: Math.round(gunCenter - realW / 2), top: 280 };
+  } else if (stage === 4) {
+        // stage 4: two-phase cross-source fusion
+    applyStage5TwoPhase();
+    return;
+  } else {
+    // stage 5: node merge
+    applyStage5Merge();
+    return;
+
+  }
+  // toggle uniform sizing for fusion layout
+  tokens.forEach(w => {
+    const el = wordEls[w.id];
+    el.classList.toggle('uniform', stage >= 4);
+  });
+
+  // hide all visual nodes for stages < 4
+  vnodeDefs.forEach(def => {
+    const el = vnodeEls[def.id];
+    el.classList.add('hidden');
+    el.style.opacity = '0';
+  });
+
+  Object.entries(positions).forEach(([id, pos]) => {
+    const el = wordEls[id];
+    el.style.left = pos.left + 'px';
+    el.style.top  = pos.top + 'px';
+  });
+
+  tokens.forEach(w => {
+    const el = wordEls[w.id];
+    el.classList.remove('default', 'noun', 'verb', 'adj', 'danger', 'fade-out');
+    if (!visible[w.id]) {
+      el.classList.add('fade-out');
+    } else if (stage >= 1) {
+      if (w.id === 'gun' && stage >= 4) {
+        el.classList.add('danger');
+      } else {
+        el.classList.add(w.type);
+      }
+    } else {
+      el.classList.add('default');
+    }
+  });
+
+  if (stage >= 4) {
+    drawFusionArrows();
+    if (textRedrawTimer) clearTimeout(textRedrawTimer);
+    textRedrawTimer = setTimeout(() => drawFusionArrows(), 900);
+  } else {
+    drawTextArrows(stage);
+    if (textRedrawTimer) clearTimeout(textRedrawTimer);
+    textRedrawTimer = setTimeout(() => drawTextArrows(stage), 1100);
+  }
+
+  document.querySelectorAll('.stage-dot').forEach((dot, i) => {
+    dot.classList.remove('active', 'done');
+    if (i < stage) dot.classList.add('done');
+    if (i === stage) dot.classList.add('active');
+  });
+
+  const labels = [
+    '文本输入', '依存句法分析', '三元关系组构建',
+    '结构文本场景图', '跨源对齐融合', '跨源节点合并'
+  ];
+  document.getElementById('stageLabel').textContent =
+    `Step ${stage + 1}/${totalStages + 1}: ${labels[stage]}`;
+
+  document.getElementById('textLegend').classList.toggle('visible', stage >= 1);
+
+  updateButtons();
+}
+
+function updateButtons() {
+  document.getElementById('btnPrev').disabled = currentStage <= 0;
+  document.getElementById('btnNext').disabled = currentStage >= totalStages;
+}
+
+// ── text navigation ─────────────────────────────────────────────
+function nextStage() {
+  if (currentStage < totalStages) {
+    resetStage5Phase();
+    applyStage(currentStage + 1);
+  }
+}
+function prevStage() {
+  if (currentStage > 0) {
+    resetStage5Phase();
+    applyStage(currentStage - 1);
+  }
+}
+function resetAll() {
+  stopAutoPlay();
+  resetStage5Phase();
+  applyStage(0);
+}
+
+function toggleAutoPlay() {
+  if (isAutoPlaying) { stopAutoPlay(); return; }
+  isAutoPlaying = true;
+  document.getElementById('btnPlay').textContent = '⏸ 暂停';
+  document.getElementById('btnPlay').classList.remove('play');
+  applyStage(0);
+  advanceAuto();
+}
+
+function stopAutoPlay() {
+  isAutoPlaying = false;
+  if (autoPlayTimer) clearTimeout(autoPlayTimer);
+  autoPlayTimer = null;
+  document.getElementById('btnPlay').textContent = '▶ 自动播放';
+  document.getElementById('btnPlay').classList.add('play');
+}
+
+const stageDurations = [2000, 1500, 1800, 2200, 4000, 3000];
+
+function advanceAuto() {
+  if (!isAutoPlaying) return;
+  if (currentStage < totalStages) {
+    nextStage();
+    autoPlayTimer = setTimeout(advanceAuto, stageDurations[currentStage]);
+  } else {
+    stopAutoPlay();
+  }
+}
+
+// ── keyboard (text section only) ────────────────────────────────
+document.addEventListener('keydown', e => {
+  // only handle if not typing in video controls etc
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextStage(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevStage(); }
+  if (e.key === 'r') resetAll();
+  if (e.key === 'p') toggleAutoPlay();
+});
+
+// ── global resize handler ───────────────────────────────────────
+window.addEventListener('resize', () => {
+  // redraw text area — re-apply stage for proper position recalculation
+  textResizeCanvas();
+  if (currentStage >= 4) {
+    if (currentStage === 5) {
+      const mergeTexts = {
+        "v-person1": 'person1<br><span class="sub">(man)</span>',
+        "v-hold":    'hold<br><span class="sub">(use)</span>',
+        "v-gun":     "gun", "v-point": "point",
+        "v-person2": 'person2<br><span class="sub">(woman)</span>',
+      };
+      vnodeDefs.forEach(def => {
+        if (mergeTexts[def.id]) {
+          vnodeEls[def.id].innerHTML = mergeTexts[def.id];
+          vnodeEls[def.id].classList.add("merged");
+        }
+      });
+      ["man","using","gun","woman"].forEach(id => {
+        wordEls[id].style.opacity = "0";
+        wordEls[id].style.transform = "scale(0.7)";
+      });
+      ["robs","real"].forEach(id => {
+        wordEls[id].style.opacity = "1";
+        wordEls[id].style.transform = "scale(1)";
+        wordEls[id].classList.add("uniform");
+      });
+      const mergedW = {};
+      vnodeDefs.forEach(def => { mergedW[def.id] = vnodeEls[def.id].offsetWidth; });
+      const mainOrder = ["v-person1","v-hold","v-gun","v-point","v-person2"];
+      const mainY = 160, mainGap = 36;
+      const mainTotalW = mainOrder.reduce((s, id) => s + mergedW[id], 0) + mainGap * (mainOrder.length - 1);
+      const mainStartX = Math.round((CTN_W - mainTotalW) / 2);
+      let cx = mainStartX;
+      mainOrder.forEach(id => {
+        vnodeEls[id].style.left = cx + "px";
+        vnodeEls[id].style.top = mainY + "px";
+        cx += mergedW[id] + mainGap;
+      });
+      const p1cx = parseFloat(vnodeEls["v-person1"].style.left) + mergedW["v-person1"]/2;
+      const p2cx = parseFloat(vnodeEls["v-person2"].style.left) + mergedW["v-person2"]/2;
+      const gunCx = parseFloat(vnodeEls["v-gun"].style.left) + mergedW["v-gun"]/2;
+      wordEls["robs"].style.left = Math.round((p1cx + p2cx)/2 - wWidth("robs")/2) + "px";
+      wordEls["robs"].style.top = "80px";
+      wordEls["real"].style.left = Math.round(gunCx - wWidth("real")/2) + "px";
+      wordEls["real"].style.top = "270px";
+      drawMergedArrows();
+    } else if (currentStage >= 4) {
+    if (stage5Phase === 1) {
+      // Phase 1: natural visual layout + stage-4 chain text layout
+      const textPosP1 = layoutRow(chainTopOrder, 90, 160);
+      const gunC = textPosP1['gun'].left + wWidth('gun') / 2;
+      textPosP1['real'] = { left: Math.round(gunC - wWidth('real') / 2), top: 280 };
+      Object.entries(textPosP1).forEach(([id, pos]) => {
+        wordEls[id].style.left = pos.left + 'px';
+        wordEls[id].style.top  = pos.top + 'px';
+      });
+      const vMeasured = {};
+      vnodeDefs.forEach(def => { vMeasured[def.id] = vnodeEls[def.id].offsetWidth; });
+      const naturalOrder = ['v-person1','v-hold','v-gun','v-point','v-person2'];
+      const totalW = naturalOrder.reduce((s, id) => s + vMeasured[id], 0);
+      const natGap = Math.max(18, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)));
+      const natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2);
+      let cx = natStartX;
+      naturalOrder.forEach(id => {
+        vnodeEls[id].style.left = cx + 'px';
+        vnodeEls[id].style.top = '100px';
+        cx += vMeasured[id] + natGap;
+      });
+      drawVisualAndTextArrows();
+    } else {
+      // Phase 2: fusion layout
+      const positions = layoutRow(chainTopOrder, 60, 230);
+      const gunCenter = positions['gun'].left + wWidth('gun') / 2;
+      const realW = wWidth('real');
+      positions['real'] = { left: Math.round(gunCenter - realW / 2), top: 330 };
+      Object.entries(positions).forEach(([id, pos]) => {
+        const el = wordEls[id];
+        el.style.left = pos.left + 'px';
+        el.style.top  = pos.top + 'px';
+      });
+      const textGunX = positions['gun'].left + wWidth('gun') / 2;
+      const textManX = positions['man'].left + wWidth('man') / 2;
+      const textWomanX = positions['woman'].left + wWidth('woman') / 2;
+      const vMeasured = {};
+      vnodeDefs.forEach(def => { vMeasured[def.id] = vnodeEls[def.id].offsetWidth; });
+      const pointMidX = (textGunX + textWomanX) / 2;
+      const vPositions = {
+        'v-point': { left: Math.round(pointMidX - vMeasured['v-point']/2), top: 40 },
+      };
+      const vY = 120;
+      vPositions['v-person1'] = { left: Math.round(textManX - vMeasured['v-person1']/2), top: vY };
+      vPositions['v-gun']     = { left: Math.round(textGunX - vMeasured['v-gun']/2), top: vY };
+      vPositions['v-person2'] = { left: Math.round(textWomanX - vMeasured['v-person2']/2), top: vY };
+      const holdMidX = (vPositions['v-person1'].left + vMeasured['v-person1']/2 + vPositions['v-gun'].left + vMeasured['v-gun']/2)/2;
+      vPositions['v-hold'] = { left: Math.round(holdMidX - vMeasured['v-hold']/2), top: vY };
+      Object.entries(vPositions).forEach(([id, pos]) => {
+        vnodeEls[id].style.left = pos.left + 'px';
+        vnodeEls[id].style.top = pos.top + 'px';
+      });
+      drawFusionArrows();
+    }
+  }
+  } else {
+    drawTextArrows(currentStage);
+  }
+  // redraw visual
+  const frame = Math.min(TOTAL_FRAMES, Math.floor(video.currentTime * FPS) + 1);
+  updateForFrame(frame);
+  if (cumulativePhase === 0) {
+    initCumulativeBasic();
+  } else {
+    const allIds = ['person1','hold','gun','point','person2'];
+    const allLabels = ['person1','hold','gun','point','person2'];
+    const allTypes = ['entity','action','danger','action','entity'];
+    cumNodes = layoutCumulative(allIds, allLabels, allTypes);
+    buildCumulativeDOM();
+  }
+});
+
+// ── text section init ───────────────────────────────────────────
+applyStage(0);
+</script>
+</body>
+</html>
