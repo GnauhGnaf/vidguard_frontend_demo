@@ -65,32 +65,13 @@
           class="fusion-scene-widget"
         />
 
-        <!-- Safe case: show relation images -->
-        <template v-else>
-          <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length === 1 }" aria-label="跨源关系图片预览">
-            <template v-if="showReport && activeRelationImages.length">
-              <figure v-for="image in activeRelationImages" :key="image.src" class="top-relation-image-card">
-                <img :src="image.src" :alt="image.alt" />
-              </figure>
-            </template>
-            <div v-else class="top-relation-placeholder">
-              <strong>{{ running ? '正在生成跨源关系图' : '等待跨源关系图' }}</strong>
-              <span>{{ running ? '检测完成后将在这里展示分析图。' : uploadedFileName ? '点击开始检测后生成并展示对应分析图。' : '上传视频并完成检测后将在这里展示对应分析图。' }}</span>
-            </div>
-          </div>
-
-          <div class="subtitle-card compact-subtitle">
-            <span>字幕 / 文案</span>
-            <p>{{ subtitleText }}</p>
-          </div>
-
-          <div class="process-row compact-process">
-            <div v-for="(step, index) in detectionSteps" :key="step" :class="['process-step', { done: index < progress, current: index === progress && running }]">
-              <span>{{ index + 1 }}</span>
-              <p>{{ step }}</p>
-            </div>
-          </div>
-        </template>
+        <!-- Safe case: show SafeFusionScene animation -->
+        <SafeFusionScene
+          v-else
+          :sentence="(selected || pendingCase)?.subtitle || ''"
+          :autoPlay="running"
+          class="fusion-scene-widget"
+        />
       </section>
     </div>
 
@@ -143,6 +124,7 @@ import harmfulKeyframe1 from '../../demo_video/harmful_keyframe_1.jpg'
 import harmfulKeyframe2 from '../../demo_video/harmful_keyframe_2.jpg'
 import FusionScene from '../components/FusionScene.vue'
 import MetaphorFusionScene from '../components/MetaphorFusionScene.vue'
+import SafeFusionScene from '../components/SafeFusionScene.vue'
 import { demoCases, detectionSteps } from '../data/demoCases'
 
 const selected = ref(null)
