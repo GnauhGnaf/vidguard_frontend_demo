@@ -657,7 +657,9 @@ function drawLayerArrows() {
 
 function drawFusionArrows() {
   drawLayerArrows()
+  const entityIds = new Set(vnodeDefs.filter(d => d.type !== 'action').map(d => d.id))
   crossPairs.forEach(pair => {
+    if (!entityIds.has(pair.v)) return  // skip action (verb) type nodes
     const vr = getVNodeRect(pair.v), tr = getWordRect(pair.t)
     if (!vr || !tr) return
     drawBidirectionalArrow(vr, tr, '#58a6ff')
