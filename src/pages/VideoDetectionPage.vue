@@ -1,11 +1,4 @@
 <template>
-  <section class="page-section workbench-heading compact-heading">
-    <div>
-      <p class="eyebrow">Multimodal detection workbench</p>
-      <h1>上传视频，生成组合风险解释。</h1>
-    </div>
-  </section>
-
   <section class="page-section detection-workstation">
     <div class="workstation-main-row">
       <aside class="sample-panel compact-panel upload-column">
@@ -25,6 +18,25 @@
         <button class="primary-btn full-width" @click="runDetection" :disabled="running || !uploadedFileName">
           {{ running ? '模型计算中' : '开始检测' }}
         </button>
+
+        <!-- Detection report summary below upload -->
+        <div v-if="showReport" class="upload-summary">
+          <span class="kicker">Detection report</span>
+          <div class="upload-summary-stack">
+            <div class="summary-decision-row">
+              <span :class="['result-dot', selected.decision]"></span>
+              <strong>{{ selected.decision === 'allowed' ? '允许发布' : '建议拦截' }}</strong>
+            </div>
+            <div>
+              <span>置信度</span>
+              <strong>{{ percent(selected.confidence) }}</strong>
+            </div>
+            <div>
+              <span>风险类型</span>
+              <strong>{{ selected.riskTypes.join(' / ') }}</strong>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <section class="video-stage compact-video-card preview-column">
@@ -37,59 +49,46 @@
           <span v-else class="status-pill pending">Pending</span>
         </div>
 
-        <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length === 1 }" aria-label="跨源关系图片预览">
-          <template v-if="showReport && activeRelationImages.length">
-            <figure v-for="image in activeRelationImages" :key="image.src" class="top-relation-image-card">
-              <img :src="image.src" :alt="image.alt" />
-            </figure>
-          </template>
-          <div v-else class="top-relation-placeholder">
-            <strong>{{ running ? '正在生成跨源关系图' : '等待跨源关系图' }}</strong>
-            <span>{{ running ? '检测完成后将在这里展示分析图。' : uploadedFileName ? '点击开始检测后生成并展示对应分析图。' : '上传视频并完成检测后将在这里展示对应分析图。' }}</span>
-          </div>
-        </div>
+        <!-- Harmful case: show FusionScene animation -->
+        <FusionScene
+          v-if="(pendingCase || selected)?.id === 'literal-risk'"
+          :sentence="(selected || pendingCase)?.subtitle || ''"
+          :autoPlay="running"
+          class="fusion-scene-widget"
+        />
 
-        <div class="subtitle-card compact-subtitle">
-          <span>字幕 / 文案</span>
-          <p>{{ subtitleText }}</p>
-        </div>
-
-        <div class="process-row compact-process">
-          <div v-for="(step, index) in detectionSteps" :key="step" :class="['process-step', { done: index < progress, current: index === progress && running }]">
-            <span>{{ index + 1 }}</span>
-            <p>{{ step }}</p>
+        <!-- Other cases: show relation images -->
+        <template v-else>
+          <div class="top-relation-carousel" :class="{ centered: showReport && activeRelationImages.length === 1 }" aria-label="跨源关系图片预览">
+            <template v-if="showReport && activeRelationImages.length">
+              <figure v-for="image in activeRelationImages" :key="image.src" class="top-relation-image-card">
+                <img :src="image.src" :alt="image.alt" />
+              </figure>
+            </template>
+            <div v-else class="top-relation-placeholder">
+              <strong>{{ running ? '正在生成跨源关系图' : '等待跨源关系图' }}</strong>
+              <span>{{ running ? '检测完成后将在这里展示分析图。' : uploadedFileName ? '点击开始检测后生成并展示对应分析图。' : '上传视频并完成检测后将在这里展示对应分析图。' }}</span>
+            </div>
           </div>
-        </div>
+
+          <div class="subtitle-card compact-subtitle">
+            <span>字幕 / 文案</span>
+            <p>{{ subtitleText }}</p>
+          </div>
+
+          <div class="process-row compact-process">
+            <div v-for="(step, index) in detectionSteps" :key="step" :class="['process-step', { done: index < progress, current: index === progress && running }]">
+              <span>{{ index + 1 }}</span>
+              <p>{{ step }}</p>
+            </div>
+          </div>
+        </template>
       </section>
     </div>
 
     <section class="decision-panel report-dock">
       <template v-if="showReport">
-        <div class="report-content-grid report-content-grid-four">
-          <article class="report-block report-summary-column">
-            <span class="kicker">Detection report</span>
-            <div class="summary-stack">
-              <div class="summary-decision-row">
-                <span :class="['result-dot', selected.decision]"></span>
-                <strong>{{ selected.decision === 'allowed' ? '允许发布' : '建议拦截' }}</strong>
-              </div>
-              <div>
-                <span>置信度</span>
-                <strong>{{ percent(selected.confidence) }}</strong>
-              </div>
-              <div>
-                <span>风险类型</span>
-                <strong>{{ selected.riskTypes.join(' / ') }}</strong>
-              </div>
-            </div>
-          </article>
-
-          <article class="report-block graph-block relation-placeholder-block">
-            <span class="kicker">Cross-source graph</span>
-            <h3>跨源关系</h3>
-            <SceneGraph :relations="selected.relations" :caseId="selected.id" />
-          </article>
-
+        <div class="report-content-grid report-content-grid-two">
           <article class="report-block signal-block">
             <span class="kicker">Signals</span>
             <h3>多模态信号解释</h3>
@@ -134,7 +133,7 @@ import metaphorRelationImage from '../../demo_video/metaphor_keyframe.jpg'
 import safeKeyframeImage from '../../demo_video/safe_keyframe.jpg'
 import harmfulKeyframe1 from '../../demo_video/harmful_keyframe_1.jpg'
 import harmfulKeyframe2 from '../../demo_video/harmful_keyframe_2.jpg'
-import SceneGraph from '../components/SceneGraph.vue'
+import FusionScene from '../components/FusionScene.vue'
 import { demoCases, detectionSteps } from '../data/demoCases'
 
 const selected = ref(null)
@@ -232,3 +231,93 @@ onBeforeUnmount(() => {
   if (timer) clearTimeout(timer)
 })
 </script>
+
+<style scoped>
+/* Override grid: narrower upload column, taller row */
+.workstation-main-row {
+  grid-template-columns: 250px minmax(620px, 1fr) !important;
+  min-height: calc(100vh - 200px) !important;
+}
+
+/* Shrink upload dropzone */
+.upload-video-dropzone {
+  min-height: 160px !important;
+}
+.upload-video-dropzone span {
+  font-size: 18px !important;
+}
+.upload-preview-video {
+  max-height: 140px !important;
+}
+
+/* Detection report summary inside upload column */
+.upload-summary {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(247,242,232,.72);
+}
+.upload-summary .kicker {
+  display: block;
+  margin-bottom: 8px;
+}
+.upload-summary-stack {
+  display: grid;
+  gap: 6px;
+}
+.upload-summary-stack > div {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(251,247,239,.72);
+}
+.upload-summary-stack span:not(.result-dot) {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.upload-summary-stack strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.summary-decision-row {
+  position: relative;
+  padding-left: 28px !important;
+}
+.summary-decision-row .result-dot {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  margin-top: -6px;
+}
+
+/* 2-column report grid */
+.report-content-grid-two {
+  grid-template-columns: 1fr 1fr !important;
+}
+.report-content-grid-two .report-block {
+  height: auto;
+  min-height: 200px;
+}
+
+/* Taller FusionScene widget */
+.fusion-scene-widget {
+  flex: 1 1 auto;
+  min-height: 600px;
+  margin-top: 4px;
+}
+
+/* Compact panel title */
+.compact-panel .panel-title h2 {
+  font-size: 20px !important;
+}
+.compact-panel .panel-title {
+  margin-bottom: 6px !important;
+}
+.full-width {
+  margin-top: 8px !important;
+}
+</style>
