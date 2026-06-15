@@ -37,6 +37,7 @@ button { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 32px;
   padding: 18px 44px;
   background: rgba(11, 18, 40, .82);
   border-bottom: 1px solid rgba(45, 69, 128, .72);

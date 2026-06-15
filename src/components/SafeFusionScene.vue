@@ -483,12 +483,19 @@ function wWidth(id) { return wordEls[id]?.offsetWidth || 0 }
 
 function layoutRow(ids, targetGap, y) {
   const widths = ids.map(id => wWidth(id))
-  const totalW = widths.reduce((a, b) => a + b, 0) + targetGap * (ids.length - 1)
+  const rowW = widths.reduce((a, b) => a + b, 0)
+  let gap = targetGap
+  let totalW = rowW + gap * (ids.length - 1)
+  if (totalW > CTN_W - 8) {
+    gap = Math.max(4, Math.floor((CTN_W - 8 - rowW) / (ids.length - 1)))
+    totalW = rowW + gap * (ids.length - 1)
+  }
   const positions = {}
   let x = Math.round((CTN_W - totalW) / 2)
+  if (x < 4) x = 4
   ids.forEach((id, i) => {
     positions[id] = { left: x, top: y }
-    x += widths[i] + targetGap
+    x += widths[i] + gap
   })
   return positions
 }
@@ -772,8 +779,13 @@ function applyStage4TwoPhase() {
   // visual: cumulative layout — row1 (5 base nodes), row2 (drink)
   const row1Ids = ['v-person1', 'v-touch', 'v-bottle', 'v-contain', 'v-water']
   const row1W = row1Ids.reduce((s, id) => s + vMeasured[id], 0)
-  const row1Gap = Math.max(16, Math.round((CTN_W - row1W) / (row1Ids.length - 1)))
-  const row1StartX = Math.round((CTN_W - (row1W + row1Gap * (row1Ids.length - 1))) / 2)
+  let row1Gap = Math.max(16, Math.round((CTN_W - row1W) / (row1Ids.length - 1)))
+  let row1StartX = Math.round((CTN_W - (row1W + row1Gap * (row1Ids.length - 1))) / 2)
+  const row1EndX = row1StartX + row1W + row1Gap * (row1Ids.length - 1)
+  if (row1EndX > CTN_W - 4) {
+    row1Gap = Math.max(4, Math.floor((CTN_W - 8 - row1W) / (row1Ids.length - 1)))
+    row1StartX = 4
+  }
   const row1Y = 14
   let r1cx = row1StartX
   row1Ids.forEach(id => {
@@ -1223,8 +1235,13 @@ function onResize() {
       // visual: cumulative layout — row1 (5 base nodes), row2 (drink)
       const row1Ids = ['v-person1', 'v-touch', 'v-bottle', 'v-contain', 'v-water']
       const row1W = row1Ids.reduce((s, id) => s + vMeasured[id], 0)
-      const row1Gap = Math.max(16, Math.round((CTN_W - row1W) / (row1Ids.length - 1)))
-      const row1StartX = Math.round((CTN_W - (row1W + row1Gap * (row1Ids.length - 1))) / 2)
+      let row1Gap = Math.max(16, Math.round((CTN_W - row1W) / (row1Ids.length - 1)))
+      let row1StartX = Math.round((CTN_W - (row1W + row1Gap * (row1Ids.length - 1))) / 2)
+      const row1EndX = row1StartX + row1W + row1Gap * (row1Ids.length - 1)
+      if (row1EndX > CTN_W - 4) {
+        row1Gap = Math.max(4, Math.floor((CTN_W - 8 - row1W) / (row1Ids.length - 1)))
+        row1StartX = Math.max(4, Math.round((CTN_W - (row1W + row1Gap * (row1Ids.length - 1))) / 2))
+      }
       const row1Y = 14
       let r1cx = row1StartX
       row1Ids.forEach(id => {

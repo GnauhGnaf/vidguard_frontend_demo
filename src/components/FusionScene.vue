@@ -484,12 +484,19 @@ function wWidth(id) { return wordEls[id]?.offsetWidth || 0 }
 
 function layoutRow(ids, targetGap, y) {
   const widths = ids.map(id => wWidth(id))
-  const totalW = widths.reduce((a, b) => a + b, 0) + targetGap * (ids.length - 1)
+  const rowW = widths.reduce((a, b) => a + b, 0)
+  let gap = targetGap
+  let totalW = rowW + gap * (ids.length - 1)
+  if (totalW > CTN_W - 8) {
+    gap = Math.max(4, Math.floor((CTN_W - 8 - rowW) / (ids.length - 1)))
+    totalW = rowW + gap * (ids.length - 1)
+  }
   const positions = {}
   let x = Math.round((CTN_W - totalW) / 2)
+  if (x < 4) x = 4
   ids.forEach((id, i) => {
     positions[id] = { left: x, top: y }
-    x += widths[i] + targetGap
+    x += widths[i] + gap
   })
   return positions
 }
@@ -786,8 +793,13 @@ function applyStage4TwoPhase() {
   // visual: natural row at y=50
   const naturalOrder = ['v-person1','v-hold','v-gun','v-point','v-person2']
   const totalW = naturalOrder.reduce((s, id) => s + vMeasured[id], 0)
-  const natGap = Math.max(16, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)))
-  const natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2)
+  let natGap = Math.max(16, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)))
+  let natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2)
+  const natEndX = natStartX + totalW + natGap * (naturalOrder.length - 1)
+  if (natEndX > CTN_W - 4) {
+    natGap = Math.max(4, Math.floor((CTN_W - 8 - totalW) / (naturalOrder.length - 1)))
+    natStartX = 4
+  }
   const natY = 50
   let cx = natStartX
   naturalOrder.forEach(id => {
@@ -1082,9 +1094,16 @@ function applyStage5Merge() {
       p2StartT[id] = { left: parseFloat(wordEls[id].style.left), top: parseFloat(wordEls[id].style.top) }
     })
 
-    const mainY = 110, mainGap = 26
-    const mainTotalW = mainOrder.reduce((s, id) => s + p2MergedW[id], 0) + mainGap * (mainOrder.length - 1)
-    const mainStartX = Math.round((CTN_W - mainTotalW) / 2)
+    const mainY = 110
+    const mainRowW = mainOrder.reduce((s, id) => s + p2MergedW[id], 0)
+    let mainGap = 26
+    let mainTotalW = mainRowW + mainGap * (mainOrder.length - 1)
+    if (mainTotalW > CTN_W - 8) {
+      mainGap = Math.max(4, Math.floor((CTN_W - 8 - mainRowW) / (mainOrder.length - 1)))
+      mainTotalW = mainRowW + mainGap * (mainOrder.length - 1)
+    }
+    let mainStartX = Math.round((CTN_W - mainTotalW) / 2)
+    if (mainStartX < 4) mainStartX = 4
 
     const finalV = {}
     let cx = mainStartX
@@ -1342,9 +1361,16 @@ function onResize() {
       })
       const mW = {}
       vnodeDefs.forEach(def => { mW[def.id] = vnodeEls[def.id].offsetWidth })
-      const mainY = 110, mainGap = 26
-      const mainTotalW = mainOrder.reduce((s, id) => s + mW[id], 0) + mainGap * (mainOrder.length - 1)
-      const mainStartX = Math.round((CTN_W - mainTotalW) / 2)
+      const mainY = 110
+      const mainRowW = mainOrder.reduce((s, id) => s + mW[id], 0)
+      let mainGap = 26
+      let mainTotalW = mainRowW + mainGap * (mainOrder.length - 1)
+      if (mainTotalW > CTN_W - 8) {
+        mainGap = Math.max(4, Math.floor((CTN_W - 8 - mainRowW) / (mainOrder.length - 1)))
+        mainTotalW = mainRowW + mainGap * (mainOrder.length - 1)
+      }
+      let mainStartX = Math.round((CTN_W - mainTotalW) / 2)
+      if (mainStartX < 4) mainStartX = 4
       let cx = mainStartX
       mainOrder.forEach(id => {
         vnodeEls[id].style.left = cx + 'px'
@@ -1371,8 +1397,13 @@ function onResize() {
       vnodeDefs.forEach(def => { vMeasured[def.id] = vnodeEls[def.id].offsetWidth })
       const naturalOrder = ['v-person1','v-hold','v-gun','v-point','v-person2']
       const totalW = naturalOrder.reduce((s, id) => s + vMeasured[id], 0)
-      const natGap = Math.max(16, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)))
-      const natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2)
+      let natGap = Math.max(16, Math.round((CTN_W - totalW) / (naturalOrder.length - 1)))
+      let natStartX = Math.round((CTN_W - (totalW + natGap * (naturalOrder.length - 1))) / 2)
+      const natEndX = natStartX + totalW + natGap * (naturalOrder.length - 1)
+      if (natEndX > CTN_W - 4) {
+        natGap = Math.max(4, Math.floor((CTN_W - 8 - totalW) / (naturalOrder.length - 1)))
+        natStartX = 4
+      }
       let cx = natStartX
       naturalOrder.forEach(id => {
         vnodeEls[id].style.left = cx + 'px'
