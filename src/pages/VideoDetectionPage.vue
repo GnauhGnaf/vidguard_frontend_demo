@@ -64,27 +64,29 @@
           <span v-else class="status-pill pending">Pending</span>
         </div>
 
-        <!-- Harmful case: show FusionScene animation -->
+        <!-- Before detection: placeholder -->
+        <div v-if="!showReport" class="fusion-placeholder">
+          <span>{{ running ? 'Analyzing' : uploadedFileName ? 'Ready' : 'Empty' }}</span>
+          <h2>{{ running ? '模型正在计算' : uploadedFileName ? '等待开始检测' : '尚未上传视频' }}</h2>
+          <p>{{ running ? '系统正在进行多模态模型计算，请稍候。' : uploadedFileName ? '点击"开始检测"后，右侧将展示跨源场景图。' : '请先在上方上传一个演示视频。' }}</p>
+        </div>
+
+        <!-- Detection done: show FusionScene animation -->
         <FusionScene
-          v-if="(pendingCase || selected)?.id === 'literal-risk'"
+          v-else-if="(pendingCase || selected)?.id === 'literal-risk'"
           :sentence="(selected || pendingCase)?.subtitle || ''"
-          :autoPlay="running"
           class="fusion-scene-widget"
         />
 
-        <!-- Metaphor case: show MetaphorFusionScene animation -->
         <MetaphorFusionScene
           v-else-if="(pendingCase || selected)?.id === 'metaphor-risk'"
           :sentence="(selected || pendingCase)?.subtitle || ''"
-          :autoPlay="running"
           class="fusion-scene-widget"
         />
 
-        <!-- Safe case: show SafeFusionScene animation -->
         <SafeFusionScene
           v-else
           :sentence="(selected || pendingCase)?.subtitle || ''"
-          :autoPlay="running"
           class="fusion-scene-widget"
         />
       </section>
@@ -324,6 +326,16 @@ onBeforeUnmount(() => {
 .upload-column, .preview-column {
   height: auto !important;
 }
+
+/* Fusion placeholder before detection */
+.fusion-placeholder {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; text-align: center; padding: 28px;
+  border: 1px dashed var(--line-strong); border-radius: 18px;
+  background: #f1e8dc; color: var(--muted); margin-top: 4px;
+}
+.fusion-placeholder h2 { margin: 8px 0 4px; font-size: 18px; color: var(--ink); }
+.fusion-placeholder p { font-size: 13px; max-width: 360px; line-height: 1.5; }
 
 /* Taller FusionScene widget */
 .fusion-scene-widget {
