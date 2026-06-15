@@ -1607,7 +1607,7 @@ defineExpose({ currentStage, nextStage, prevStage, resetAll, toggleAutoPlay })
 
 .fs-main-container {
   position: absolute; top: 288px; left: 8px; right: 8px;
-  bottom: 52px;
+  bottom: 52px; overflow: hidden;
 }
 
 .fs-main-container canvas {
