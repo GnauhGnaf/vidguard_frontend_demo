@@ -167,6 +167,11 @@ function renderCurrentGraph(nodes, arrows) {
     if (gap < 18) gap = 18
     startX = Math.round((rect.width - (totalW + gap * (ids.length - 1))) / 2)
     if (startX < 4) startX = 4
+    const endX = startX + totalW + gap * (ids.length - 1)
+    if (endX > rect.width - 4) {
+      gap = Math.max(4, Math.floor((rect.width - 8 - totalW) / (ids.length - 1)))
+      startX = 4
+    }
   }
 
   const positions = {}
@@ -231,7 +236,12 @@ function layoutCumulative(ids, labels, types) {
   const n = ids.length
   let gap = n > 1 ? Math.round((rect.width - totalW) / (n - 1)) : 0
   if (gap < 18) gap = 18
-  const startX = Math.max(4, Math.round((rect.width - (totalW + gap * (n - 1))) / 2))
+  let startX = Math.max(4, Math.round((rect.width - (totalW + gap * (n - 1))) / 2))
+  const endX = startX + totalW + gap * (n - 1)
+  if (endX > rect.width - 4 && n > 1) {
+    gap = Math.max(4, Math.floor((rect.width - 8 - totalW) / (n - 1)))
+    startX = 4
+  }
   const result = {}
   let cx = startX
   measured.forEach(m => {
@@ -341,7 +351,12 @@ function expandCumulative() {
   const totalW = measured.reduce((s, m) => s + m.w, 0)
   let gap = Math.round((rect.width - totalW) / 4)
   if (gap < 18) gap = 18
-  const startX = Math.max(4, Math.round((rect.width - (totalW + gap * 4)) / 2))
+  let startX = Math.max(4, Math.round((rect.width - (totalW + gap * 4)) / 2))
+  const endX = startX + totalW + gap * 4
+  if (endX > rect.width - 4) {
+    gap = Math.max(4, Math.floor((rect.width - 8 - totalW) / 4))
+    startX = 4
+  }
 
   const target = {}
   let cx = startX

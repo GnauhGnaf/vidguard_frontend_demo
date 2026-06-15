@@ -143,6 +143,11 @@ function renderCurrentGraph(nodes, arrows) {
       if (gap < 18) gap = 18
       startX = Math.round((rect.width - (rowW + gap * (rowIds.length - 1))) / 2)
       if (startX < 4) startX = 4
+      const endX = startX + rowW + gap * (rowIds.length - 1)
+      if (endX > rect.width - 4) {
+        gap = Math.max(4, Math.floor((rect.width - 8 - rowW) / (rowIds.length - 1)))
+        startX = 4
+      }
     }
     let cx = startX
     rowIds.forEach(id => {
@@ -208,7 +213,12 @@ function layoutCumulative(ids, labels, types) {
   const n = ids.length
   let gap = n > 1 ? Math.round((rect.width - totalW) / (n - 1)) : 0
   if (gap < 18) gap = 18
-  const startX = Math.max(4, Math.round((rect.width - (totalW + gap * (n - 1))) / 2))
+  let startX = Math.max(4, Math.round((rect.width - (totalW + gap * (n - 1))) / 2))
+  const endX = startX + totalW + gap * (n - 1)
+  if (endX > rect.width - 4 && n > 1) {
+    gap = Math.max(4, Math.floor((rect.width - 8 - totalW) / (n - 1)))
+    startX = 4
+  }
   const result = {}
   let cx = startX
   measured.forEach(m => {
@@ -323,7 +333,12 @@ function expandCumulative() {
   const target = {}
 
   // Layout row 1 at top: 14
-  const startX1 = Math.max(4, Math.round((rect.width - (row1W + gap1 * (row1Ids.length - 1))) / 2))
+  let startX1 = Math.max(4, Math.round((rect.width - (row1W + gap1 * (row1Ids.length - 1))) / 2))
+  const endX1 = startX1 + row1W + gap1 * (row1Ids.length - 1)
+  if (endX1 > rect.width - 4) {
+    gap1 = Math.max(4, Math.floor((rect.width - 8 - row1W) / (row1Ids.length - 1)))
+    startX1 = 4
+  }
   let cx = startX1
   row1Measured.forEach(m => {
     target[m.id] = { left: cx, top: 14, width: m.w, height: m.h, label: row1Labels[row1Ids.indexOf(m.id)], type: row1Types[row1Ids.indexOf(m.id)] }
@@ -1272,7 +1287,12 @@ function onResize() {
     let gap1 = Math.round((rect.width - row1W) / (row1Ids.length - 1))
     if (gap1 < 18) gap1 = 18
     cumNodes = {}
-    const startX1 = Math.max(4, Math.round((rect.width - (row1W + gap1 * (row1Ids.length - 1))) / 2))
+    let startX1 = Math.max(4, Math.round((rect.width - (row1W + gap1 * (row1Ids.length - 1))) / 2))
+    const endX1 = startX1 + row1W + gap1 * (row1Ids.length - 1)
+    if (endX1 > rect.width - 4) {
+      gap1 = Math.max(4, Math.floor((rect.width - 8 - row1W) / (row1Ids.length - 1)))
+      startX1 = 4
+    }
     let cx = startX1
     row1Measured.forEach(m => {
       cumNodes[m.id] = { left: cx, top: 14, width: m.w, height: m.h, label: row1Labels[row1Ids.indexOf(m.id)], type: row1Types[row1Ids.indexOf(m.id)] }
