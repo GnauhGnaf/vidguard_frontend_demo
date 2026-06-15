@@ -11,9 +11,24 @@
           <input type="file" accept="video/*" @change="handleUpload" />
           <video v-if="previewVideo" class="upload-preview-video" :src="previewVideo" controls muted playsinline />
           <span v-else>选择演示视频</span>
-          <small>{{ uploadedFileName || '支持 safe / harmful / metaphor 三类演示视频；分析结果为预生成报告。' }}</small>
+          <small>{{ uploadedFileName ? '点击重新上传' : '支持 safe / harmful / metaphor 三类演示视频；分析结果为预生成报告。' }}</small>
         </label>
 
+        <div class="caption-box" v-if="uploadedFileName">
+          <div class="caption-box-header">
+            <div>
+              <span class="kicker">Caption</span>
+              <h2>字幕文案</h2>
+            </div>
+            <button class="caption-edit-btn" :class="{ editing: isEditingCaption }"
+                    @click="toggleCaptionEdit">
+              {{ isEditingCaption ? '完成' : '编辑' }}
+            </button>
+          </div>
+          <textarea v-if="isEditingCaption" class="caption-textarea" v-model="captionText"
+                    rows="3" placeholder="输入或修改字幕文案…"></textarea>
+          <p v-else class="caption-preview">{{ captionText }}</p>
+        </div>
 
         <button class="primary-btn full-width" @click="runDetection" :disabled="running || !uploadedFileName">
           {{ running ? '模型计算中' : '开始检测' }}
@@ -42,8 +57,8 @@
       <section class="video-stage compact-video-card preview-column">
         <div class="stage-header compact-card-header">
           <div>
-            <span class="kicker">Visual Scene Entity Extraction</span>
-            <h2>视觉场景实体抽取</h2>
+            <span class="kicker">Cross-Source Scene Graph</span>
+            <h2>跨源场景图</h2>
           </div>
           <span v-if="showReport" :class="['status-pill', selected.decision]">{{ selected.decision === 'allowed' ? 'Allowed' : 'Blocked' }}</span>
           <span v-else class="status-pill pending">Pending</span>
@@ -134,7 +149,13 @@ const uploadedVideoUrl = ref('')
 const running = ref(false)
 const hasReport = ref(false)
 const progress = ref(0)
+const captionText = ref('')
+const isEditingCaption = ref(false)
 let timer = null
+
+function toggleCaptionEdit() {
+  isEditingCaption.value = !isEditingCaption.value
+}
 
 const relationImageMap = {
   'safe-video': [
@@ -177,6 +198,8 @@ function handleUpload(event) {
   uploadedFileName.value = file.name
   uploadedVideoUrl.value = URL.createObjectURL(file)
   pendingCase.value = pickCaseByFileName(file.name)
+  captionText.value = pendingCase.value?.subtitle || ''
+  isEditingCaption.value = false
   selected.value = null
   hasReport.value = false
   running.value = false
@@ -294,10 +317,18 @@ onBeforeUnmount(() => {
   min-height: 200px;
 }
 
+/* Constrain workstation row: right column dictates height, left follows */
+.workstation-main-row {
+  min-height: 0 !important;
+}
+.upload-column, .preview-column {
+  height: auto !important;
+}
+
 /* Taller FusionScene widget */
 .fusion-scene-widget {
-  flex: 1 1 auto;
-  min-height: 600px;
+  flex: 0 0 auto;
+  height: 620px;
   margin-top: 4px;
 }
 
@@ -310,5 +341,42 @@ onBeforeUnmount(() => {
 }
 .full-width {
   margin-top: 8px !important;
+}
+
+/* Caption / subtitle box */
+.caption-box {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(251,247,239,.72);
+}
+.caption-box-header {
+  display: flex; justify-content: space-between; align-items: start;
+  margin-bottom: 6px;
+}
+.caption-box-header h2 {
+  font-size: 20px; margin: 4px 0 0;
+}
+.caption-edit-btn {
+  font-size: 11px; padding: 3px 12px; border-radius: 8px;
+  border: 1px solid var(--line-strong); background: var(--paper);
+  color: var(--ink); cursor: pointer; transition: .15s ease;
+}
+.caption-edit-btn.editing {
+  background: var(--ink); color: var(--paper); border-color: var(--ink);
+}
+.caption-textarea {
+  width: 100%; resize: vertical; min-height: 64px;
+  padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper-soft);
+  color: var(--ink); font-size: 13px; line-height: 1.5;
+  outline: none; font-family: inherit;
+}
+.caption-preview {
+  margin: 0; padding: 6px 0;
+  font-size: 13px; line-height: 1.5; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
 }
 </style>

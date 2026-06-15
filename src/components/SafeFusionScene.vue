@@ -1380,8 +1380,7 @@ defineExpose({ currentStage, nextStage, prevStage, resetAll, toggleAutoPlay })
   border-radius: 14px;
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: 640px;
+  height: 620px;
   font-family: 'PingFang SC', 'SF Pro Display', 'Helvetica Neue', sans-serif;
   color: #e6edf3;
   overflow: hidden;
@@ -1456,7 +1455,7 @@ defineExpose({ currentStage, nextStage, prevStage, resetAll, toggleAutoPlay })
 
 .mfs-main-container {
   position: absolute; top: 288px; left: 8px; right: 8px;
-  bottom: 52px;
+  height: 280px;
 }
 
 .mfs-main-container canvas {
