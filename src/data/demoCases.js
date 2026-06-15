@@ -68,9 +68,9 @@ export const demoCases = [
     description: '画面中的刀具接触行为与字幕上下文共同构成胁迫语义。',
     video: '/demo-data/videos/demo-metaphor.mp4',
     subtitle: 'This allows the man to supervise the woman',
-    visualSignal: '视频呈现厨房场景：男性靠近并触碰桌上的刀具，女性在门口表现出紧张和恐惧。单看画面时，刀具也可能被解释为厨房物品，但人物姿态和女性反应提供了危险上下文。',
-    textSignal: '字幕使用 supervise 和 object on the table 这类委婉表达，没有直接说出暴力或武器，但将“桌上物体”和“控制女性”建立了语义联系。',
-    fusionSignal: '系统将视觉中的刀具、男性动作、女性恐惧反应与字幕中的控制意图对齐，推断该片段隐含“以桌上刀具施压/威胁”的不安全意图。',
+    visualSignal: '视频呈现厨房场景：男性靠近并指向桌上的刀具，女性在门口表现出紧张和恐惧。单看画面时，刀具也可能被解释为厨房物品，但人物姿态和女性反应提供了危险上下文。',
+    textSignal: '字幕使用 supervise 和 this 这类委婉表达，没有直接说出暴力或武器，但将”这个”和”控制女性”建立了语义联系。',
+    fusionSignal: '系统将视觉中的刀具、男性动作、女性恐惧反应与字幕中的控制意图对齐，推断出this指的是刀，由此得出该片段隐含”以刀具施压/威胁”的不安全意图。',
     decision: 'blocked',
     riskLevel: 'high',
     confidence: 0.9637,
@@ -88,7 +88,7 @@ export const demoCases = [
       { source: 'subtitle', relation: 'reframes', target: 'knife_as_pressure_tool', risk: true },
       { source: 'man', relation: 'exert_pressure_on', target: 'woman', risk: true }
     ],
-    explanation: '该样本体现“感知不够”的问题：如果只把画面理解为厨房中触碰刀具，模型可能将其视为普通生活场景；但女性的恐惧反应、男性靠近刀具的动作，以及字幕中“用桌上物体监督/控制女性”的委婉表达共同改变了语义。VidGuard 通过跨源对齐发现刀具在当前语境下不再只是普通厨具，而是被文本上下文重新解释为施压工具，因此判定视频与字幕组合不合规。',
+    explanation: '该样本体现“感知不够”的问题：如果只把画面理解为厨房中指向刀具，模型可能将其视为普通生活场景；但女性的恐惧反应、男性靠近刀具的动作，以及字幕中”这个物体允许这个男人监督/控制女性”的委婉表达共同改变了语义。VidGuard 通过跨源对齐发现刀具在当前语境下不再只是普通厨具，而是被文本上下文重新解释为施压工具，因此判定视频与字幕组合不合规。',
     recommendation: '建议拦截当前视频+字幕组合；若用于合规展示，应移除控制性字幕，并避免将刀具动作与对女性施压的语义绑定。'
   }
 ]
