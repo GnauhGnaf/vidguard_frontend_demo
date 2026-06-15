@@ -994,8 +994,6 @@ function applyStage5Merge() {
         vnodeEls[def.id].classList.add('merged')
       }
     })
-    // bottle and water: same name, keep as is (but mergeText handles them)
-    // contain: no text counterpart, stays as contain
 
     // Fade out all text tokens
     ;['bottle', 'using', 'woman', 'drinks', 'water'].forEach(tId => {
