@@ -514,7 +514,7 @@ onBeforeUnmount(() => {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(247,242,232,.72);
+  background: rgba(11,18,40,.85);
 }
 .upload-summary .kicker {
   display: block;
@@ -528,7 +528,7 @@ onBeforeUnmount(() => {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(251,247,239,.72);
+  background: rgba(11,18,40,.8);
 }
 .upload-summary-stack span:not(.result-dot) {
   display: block;
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
   flex: 1; display: flex; flex-direction: column; justify-content: center;
   align-items: center; text-align: center; padding: 28px;
   border: 1px dashed var(--line-strong); border-radius: 18px;
-  background: #f1e8dc; color: var(--muted); margin-top: 4px;
+  background: #0b1228; color: var(--muted); margin-top: 4px;
 }
 .fusion-placeholder h2 { margin: 8px 0 4px; font-size: 18px; color: var(--ink); }
 .fusion-placeholder p { font-size: 13px; max-width: 360px; line-height: 1.5; }
@@ -590,7 +590,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 240px;
-  background: #0d1117;
+  background: transparent;
   z-index: 20;
   border-radius: 14px 14px 0 0;
   display: flex;
@@ -647,7 +647,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #161b22;
+  background: #060b1a;
   border: 1px solid #21262d;
   border-radius: 6px;
   color: #8b949e;
@@ -671,7 +671,7 @@ onBeforeUnmount(() => {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(251,247,239,.72);
+  background: rgba(11,18,40,.8);
 }
 .caption-box-header {
   display: flex; justify-content: space-between; align-items: start;
@@ -707,7 +707,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   height: 620px;
   position: relative;
-  background: #0d1117;
+  background: transparent;
   border-radius: 14px;
   margin-top: 4px;
   overflow: hidden;
@@ -751,12 +751,13 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em; margin-bottom: 2px;
 }
 .sb-graph-stage {
-  flex: 1; position: relative; background: #161b22;
-  border: 1px solid #21262d; border-radius: 6px;
+  flex: 1; position: relative; background: rgba(6, 11, 26, 0.35);
+  border: 1px solid #21262d; border-radius: 6px; overflow: hidden;
 }
 .sb-graph-waiting {
   display: flex; align-items: center; justify-content: center;
   gap: 8px; font-size: 13px; color: #8b949e;
+  background: #060b1a;
 }
 
 /* ── Stage indicator dots ─ */

@@ -1511,7 +1511,7 @@ defineExpose({ currentStage, nextStage, prevStage, resetAll, toggleAutoPlay })
   --fs-adj: #7ee787;
   --fs-danger: #ff4a4a;
 
-  background: var(--fs-bg);
+  background: transparent;
   border-radius: 14px;
   position: relative;
   width: 100%;
@@ -1552,8 +1552,8 @@ defineExpose({ currentStage, nextStage, prevStage, resetAll, toggleAutoPlay })
   letter-spacing: 0.06em; margin-bottom: 2px;
 }
 .fs-graph-stage {
-  flex: 1; position: relative; background: #161b22;
-  border: 1px solid #21262d; border-radius: 6px;
+  flex: 1; position: relative; background: rgba(6, 11, 26, 0.35);
+  border: 1px solid #21262d; border-radius: 6px; overflow: hidden;
 }
 .fs-graph-canvas {
   position: absolute; top: 0; left: 0;

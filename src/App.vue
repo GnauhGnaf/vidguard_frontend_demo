@@ -1,5 +1,6 @@
 <template>
   <div class="app-shell">
+    <NeuralBackground />
     <header class="topbar">
       <RouterLink class="brand" to="/" aria-label="VidGuard 首页">
         <span class="brand-mark">V</span>
@@ -14,9 +15,12 @@
         <span class="topbar-avatar">演</span>
       </RouterLink>
     </header>
-
     <main>
       <RouterView />
     </main>
   </div>
 </template>
+
+<script setup>
+import NeuralBackground from './components/NeuralBackground.vue'
+</script>
